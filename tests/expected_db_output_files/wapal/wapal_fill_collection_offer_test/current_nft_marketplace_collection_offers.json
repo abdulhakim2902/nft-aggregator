@@ -1,0 +1,18 @@
+[
+  {
+    "collection_offer_id": "0x8eb23351a1e2a9ed5d5516d6a592ec8fe8e3beeaedd7a7de9cdfc1cc8d9a0d73",
+    "collection_id": "0xa2485c3b392d211770ed161e73a1097d21016c7dd41f53592434380b2aa14cba",
+    "buyer": "0xd098ed4c8a4fecfd082149216a1029ff1ed3d4dffd628348b018ed00036eec22",
+    "price": 2550510000,
+    "remaining_token_amount": 0,
+    "is_deleted": true,
+    "marketplace": "wapal",
+    "contract_address": "0x71f7c94805c33d32a7f9560c95f02e9d3b5bc49884a883916f03abe6da11ac08",
+    "last_transaction_version": 2382219668,
+    "last_transaction_timestamp": "2025-02-18T19:51:46.707377",
+    "standard_event_type": "fill_collection_offer",
+    "token_data_id": "0xfa0f4628e8737fe9149070e0aa5801a4c0c872f519fa622c363c7f397cf38229",
+    "expiration_time": null,
+    "bid_key": null
+  }
+]
