@@ -1,3 +1,4 @@
+pub mod collection;
 pub mod nft_models;
 
 use crate::config::marketplace_config::EventType;

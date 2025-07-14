@@ -3,6 +3,7 @@ use crate::{
         EventFieldRemappings, EventType, MarketplaceEventType, NFTMarketplaceConfig,
     },
     models::{
+        collection::Collection,
         nft_models::{
             CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
@@ -18,7 +19,7 @@ use crate::{
 use anyhow::Result;
 use aptos_indexer_processor_sdk::{
     aptos_indexer_transaction_stream::utils::time::parse_timestamp,
-    aptos_protos::transaction::v1::{transaction::TxnData, Transaction},
+    aptos_protos::transaction::v1::{transaction::TxnData, write_set_change::Change, Transaction},
     utils::{convert::standardize_address, extract::hash_str},
 };
 use std::{collections::HashMap, str::FromStr, sync::Arc};
@@ -76,14 +77,31 @@ impl EventRemapper {
         Vec<CurrentNFTMarketplaceListing>,
         Vec<CurrentNFTMarketplaceTokenOffer>,
         Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<Collection>,
     )> {
         let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
         let mut current_token_offers: Vec<CurrentNFTMarketplaceTokenOffer> = Vec::new();
         let mut current_collection_offers: Vec<CurrentNFTMarketplaceCollectionOffer> = Vec::new();
         let mut current_listings: Vec<CurrentNFTMarketplaceListing> = Vec::new();
+        let mut collections: Vec<Collection> = Vec::new();
 
+        let transaction_info = txn.info.as_ref();
         let txn_timestamp =
             parse_timestamp(txn.timestamp.as_ref().unwrap(), txn.version as i64).naive_utc();
+
+        if let Some(transaction_info) = transaction_info {
+            for wsc in transaction_info.changes.iter() {
+                match wsc.change.as_ref().unwrap() {
+                    Change::WriteResource(resource) => {
+                        let collection = Collection::get_from_write_resource(resource)?;
+                        if let Some(collection) = collection {
+                            collections.push(collection);
+                        }
+                    },
+                    _ => {},
+                }
+            }
+        }
 
         let events = self.get_events(Arc::new(txn))?;
 
@@ -371,6 +389,7 @@ impl EventRemapper {
             current_listings,
             current_token_offers,
             current_collection_offers,
+            collections,
         ))
     }
 
@@ -641,7 +660,7 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers) =
+        let (activities, listings, token_offers, collection_offers, _) =
             remapper.remap_events(transaction)?;
 
         // Verify results
@@ -753,7 +772,7 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers) =
+        let (activities, listings, token_offers, collection_offers, _) =
             remapper.remap_events(transaction)?;
 
         // Verify results
@@ -867,7 +886,7 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers) =
+        let (activities, listings, token_offers, collection_offers, _) =
             remapper.remap_events(transaction)?;
 
         // Verify results
@@ -974,7 +993,7 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers) =
+        let (activities, listings, token_offers, collection_offers, _) =
             remapper.remap_events(transaction)?;
 
         // Verify results
@@ -1109,7 +1128,7 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers) =
+        let (activities, listings, token_offers, collection_offers, _) =
             remapper.remap_events(transaction)?;
 
         // Verify results
