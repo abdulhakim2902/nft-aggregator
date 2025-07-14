@@ -15,6 +15,30 @@ diesel::table! {
 }
 
 diesel::table! {
+    collections (id) {
+        id -> Uuid,
+        #[max_length = 66]
+        slug -> Nullable<Varchar>,
+        supply -> Nullable<Int8>,
+        #[max_length = 128]
+        title -> Nullable<Varchar>,
+        #[max_length = 66]
+        twitter -> Nullable<Varchar>,
+        usd_volume -> Nullable<Int8>,
+        verified -> Nullable<Bool>,
+        volume -> Nullable<Int8>,
+        #[max_length = 128]
+        website -> Nullable<Varchar>,
+        floor -> Nullable<Int8>,
+        #[max_length = 66]
+        discord -> Nullable<Varchar>,
+        description -> Nullable<Text>,
+        #[max_length = 128]
+        cover_url -> Nullable<Varchar>,
+    }
+}
+
+diesel::table! {
     current_nft_marketplace_collection_offers (collection_offer_id, marketplace) {
         #[max_length = 128]
         collection_offer_id -> Varchar,
@@ -49,13 +73,13 @@ diesel::table! {
         seller -> Nullable<Varchar>,
         price -> Int8,
         token_amount -> Nullable<Int8>,
-        token_name -> Nullable<Varchar>,
         is_deleted -> Bool,
         marketplace -> Varchar,
         contract_address -> Varchar,
         last_transaction_version -> Int8,
         last_transaction_timestamp -> Timestamp,
         standard_event_type -> Varchar,
+        token_name -> Nullable<Varchar>,
     }
 }
 
@@ -128,6 +152,7 @@ diesel::table! {
 
 diesel::allow_tables_to_appear_in_same_query!(
     backfill_processor_status,
+    collections,
     current_nft_marketplace_collection_offers,
     current_nft_marketplace_listings,
     current_nft_marketplace_token_offers,
