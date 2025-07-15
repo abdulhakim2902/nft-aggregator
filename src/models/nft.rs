@@ -24,10 +24,7 @@ pub struct Nft {
 }
 
 impl Nft {
-    pub fn new(collection_id: &str, token_id: &str) -> Self {
-        let collection_id = standardize_address(collection_id);
-        let token_id = standardize_address(token_id);
-
+    pub fn new(collection_id: &str, token_id: &str, uri: Option<String>) -> Self {
         let key = format!("{}::{}", collection_id, token_id);
         let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, key.as_bytes());
         let collection_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
@@ -35,7 +32,7 @@ impl Nft {
         Nft {
             id: Some(id),
             media_type: None,
-            media_url: None,
+            media_url: uri,
             name: None,
             owner: None,
             token_id: Some(token_id.to_string()),

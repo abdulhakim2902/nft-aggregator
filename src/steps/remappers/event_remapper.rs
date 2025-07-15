@@ -3,7 +3,7 @@ use crate::{
         EventFieldRemappings, EventType, MarketplaceEventType, NFTMarketplaceConfig,
     },
     models::{
-        collection::{Collection, MintEvent},
+        collection::{Collection, CreateTokenDataEvent, MintEvent},
         nft::Nft,
         nft_models::{
             CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
@@ -409,18 +409,40 @@ impl EventRemapper {
                     let collection = collection_data
                         .get(&collection_id)
                         .cloned()
-                        .unwrap_or(Collection::new(&collection_id));
-
-                    collection_data.insert(collection_id.clone(), collection);
+                        .unwrap_or(Collection::new(&collection_id, None, None, None));
 
                     let token_id = standardize_address(&mint_event.token);
-                    let nft = nft_data
-                        .get(&token_id)
-                        .cloned()
-                        .unwrap_or(Nft::new(&collection_id, &token_id));
+                    let nft = nft_data.get(&token_id).cloned().unwrap_or(Nft::new(
+                        &collection_id,
+                        &token_id,
+                        None,
+                    ));
 
+                    collection_data.insert(collection_id, collection);
                     nft_data.insert(token_id, nft);
                 };
+            } else if event.type_.as_str() == "0x3::token::CreateTokenDataEvent" {
+                if let Some(create_token_event) =
+                    serde_json::from_value::<CreateTokenDataEvent>(event.data).ok()
+                {
+                    let collection_id = create_token_event.get_collection_id();
+                    let name = create_token_event.id.name.as_str();
+                    let description = create_token_event.description.as_str();
+                    let uri = create_token_event.uri.as_str();
+
+                    let token_id = create_token_event.get_token_id();
+
+                    let nft = Nft::new(&collection_id, &token_id, Some(uri.to_string()));
+                    let collection = Collection::new(
+                        &collection_id,
+                        Some(name.to_string()),
+                        Some(description.to_string()),
+                        Some(uri.to_string()),
+                    );
+
+                    collection_data.insert(collection_id, collection);
+                    nft_data.insert(token_id, nft);
+                }
             }
         }
 

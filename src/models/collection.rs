@@ -27,7 +27,12 @@ pub struct Collection {
 }
 
 impl Collection {
-    pub fn new(collection_id: &str) -> Self {
+    pub fn new(
+        collection_id: &str,
+        name: Option<String>,
+        description: Option<String>,
+        uri: Option<String>,
+    ) -> Self {
         let collection_id = standardize_address(&collection_id);
         let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
 
@@ -35,9 +40,9 @@ impl Collection {
             id: Some(id),
             slug: Some(collection_id),
             supply: None,
-            title: None,
-            description: None,
-            cover_url: None,
+            title: name,
+            description,
+            cover_url: uri,
         }
     }
 
@@ -128,8 +133,52 @@ pub struct UnlimitedSupplyStruct {
     pub total_minted: BigDecimal,
 }
 
+// Event
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MintEvent {
     pub collection: String,
     pub token: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreateTokenDataEvent {
+    pub description: String,
+    pub id: CreateTokenDataIdStruct,
+    pub name: String,
+    pub uri: String,
+}
+
+impl CreateTokenDataEvent {
+    pub fn get_collection_id(&self) -> String {
+        self.id.get_collection_id()
+    }
+
+    pub fn get_token_id(&self) -> String {
+        self.name.replace(" ", "%20")
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreateTokenDataIdStruct {
+    pub collection: String,
+    pub creator: String,
+    pub name: String,
+}
+
+impl CreateTokenDataIdStruct {
+    pub fn get_collection_id(&self) -> String {
+        let alphanumeric_only = self
+            .collection
+            .chars()
+            .filter(|&c| c.is_alphanumeric() || c == ' ')
+            .collect::<String>();
+        let name = alphanumeric_only
+            .split_whitespace()
+            .collect::<Vec<&str>>()
+            .join("-");
+        let split_addr = self.creator.split("").collect::<Vec<&str>>();
+        let trunc_addr = &split_addr[3..11].join("");
+
+        format!("{}-{}", name, trunc_addr)
+    }
 }
