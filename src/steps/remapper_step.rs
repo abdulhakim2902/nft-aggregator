@@ -1,10 +1,13 @@
 use super::remappers::resource_remapper::ResourceMapper;
 use crate::{
     config::marketplace_config::NFTMarketplaceConfig,
-    models::{collection::Collection, nft_models::{
-        CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
-        CurrentNFTMarketplaceTokenOffer, NftMarketplaceActivity,
-    }},
+    models::{
+        collection::Collection,
+        nft_models::{
+            CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
+            CurrentNFTMarketplaceTokenOffer, NftMarketplaceActivity,
+        },
+    },
     steps::remappers::event_remapper::EventRemapper,
 };
 use anyhow::Result;

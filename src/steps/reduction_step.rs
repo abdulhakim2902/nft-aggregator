@@ -1,10 +1,13 @@
 use crate::{
     config::marketplace_config::MarketplaceEventType,
-    models::{collection::Collection, nft_models::{
-        CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
-        CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
-        NftMarketplaceActivity,
-    }},
+    models::{
+        collection::Collection,
+        nft_models::{
+            CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
+            CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
+            NftMarketplaceActivity,
+        },
+    },
 };
 use aptos_indexer_processor_sdk::{
     traits::{AsyncRunType, AsyncStep, NamedStep, Processable},
@@ -100,6 +103,7 @@ impl Processable for NFTReductionStep {
         Vec<CurrentNFTMarketplaceListing>,
         Vec<CurrentNFTMarketplaceTokenOffer>,
         Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<Collection>,
     );
     type RunType = AsyncRunType;
 
@@ -112,7 +116,7 @@ impl Processable for NFTReductionStep {
             current_listings,
             current_token_offers,
             current_collection_offers,
-            _collection,
+            collections,
             resource_updates,
         ) = transactions.data;
 
@@ -173,7 +177,13 @@ impl Processable for NFTReductionStep {
         let reduced_data = self.accumulator.drain();
 
         Ok(Some(TransactionContext {
-            data: reduced_data,
+            data: (
+                reduced_data.0,
+                reduced_data.1,
+                reduced_data.2,
+                reduced_data.3,
+                collections,
+            ),
             metadata: transactions.metadata,
         }))
     }

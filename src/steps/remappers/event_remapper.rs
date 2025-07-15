@@ -3,7 +3,9 @@ use crate::{
         EventFieldRemappings, EventType, MarketplaceEventType, NFTMarketplaceConfig,
     },
     models::{
-        collection::Collection,
+        collection::{
+            Collection, CollectionMetadata, ConcurrentSupply, FixedSupply, UnlimitedSupply,
+        },
         nft_models::{
             CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
@@ -22,6 +24,7 @@ use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::{transaction::TxnData, write_set_change::Change, Transaction},
     utils::{convert::standardize_address, extract::hash_str},
 };
+use bigdecimal::BigDecimal;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tracing::{debug, warn};
 
@@ -90,10 +93,51 @@ impl EventRemapper {
             parse_timestamp(txn.timestamp.as_ref().unwrap(), txn.version as i64).naive_utc();
 
         if let Some(transaction_info) = transaction_info {
+            let mut collection_metadata: HashMap<String, CollectionMetadata> = HashMap::new();
+
             for wsc in transaction_info.changes.iter() {
                 match wsc.change.as_ref().unwrap() {
                     Change::WriteResource(resource) => {
-                        let collection = Collection::get_from_write_resource(resource)?;
+                        let address = standardize_address(&resource.address);
+                        if resource.type_str.starts_with("0x4::collection") {
+                            let mut metadata = collection_metadata
+                                .get(&address)
+                                .cloned()
+                                .unwrap_or_default();
+
+                            let resource_data = resource.data.as_str();
+                            if &resource.type_str == "0x4::collection::ConcurrentSupply" {
+                                let concurrent_supply =
+                                    serde_json::from_str::<ConcurrentSupply>(resource_data)
+                                        .map_err(anyhow::Error::msg)?;
+                                metadata.supply = concurrent_supply.current_supply.value;
+                            } else if &resource.type_str == "0x4::collection::FixedSupply" {
+                                let fixed_supply =
+                                    serde_json::from_str::<FixedSupply>(resource_data)
+                                        .map_err(anyhow::Error::msg)?;
+                                metadata.supply = fixed_supply.current_supply;
+                            } else if &resource.type_str == "0x4::collection::UnlimitedSupply" {
+                                let unlimited_supply =
+                                    serde_json::from_str::<UnlimitedSupply>(resource_data)
+                                        .map_err(anyhow::Error::msg)?;
+                                metadata.supply = unlimited_supply.current_supply;
+                            } else {
+                                metadata.supply = BigDecimal::from(0);
+                            }
+
+                            collection_metadata.insert(address, metadata);
+                        }
+                    },
+                    _ => {},
+                }
+            }
+
+            for wsc in transaction_info.changes.iter() {
+                match wsc.change.as_ref().unwrap() {
+                    Change::WriteResource(resource) => {
+                        let addr = standardize_address(&resource.address);
+                        let metadata = collection_metadata.get(&addr).cloned().unwrap_or_default();
+                        let collection = Collection::get_from_write_resource(resource, &metadata)?;
                         if let Some(collection) = collection {
                             collections.push(collection);
                         }

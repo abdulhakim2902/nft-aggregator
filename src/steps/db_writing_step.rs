@@ -1,7 +1,10 @@
 use crate::{
-    models::nft_models::{
-        CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
-        CurrentNFTMarketplaceTokenOffer, NftMarketplaceActivity,
+    models::{
+        collection::Collection,
+        nft_models::{
+            CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
+            CurrentNFTMarketplaceTokenOffer, NftMarketplaceActivity,
+        },
     },
     postgres::postgres_utils::{execute_in_chunks, ArcDbPool},
     schema,
@@ -37,6 +40,7 @@ impl Processable for DBWritingStep {
         Vec<CurrentNFTMarketplaceListing>,
         Vec<CurrentNFTMarketplaceTokenOffer>,
         Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<Collection>,
     );
     type Output = ();
     type RunType = AsyncRunType;
@@ -48,9 +52,10 @@ impl Processable for DBWritingStep {
             Vec<CurrentNFTMarketplaceListing>,
             Vec<CurrentNFTMarketplaceTokenOffer>,
             Vec<CurrentNFTMarketplaceCollectionOffer>,
+            Vec<Collection>,
         )>,
     ) -> Result<Option<TransactionContext<()>>, ProcessorError> {
-        let (activities, listings, token_offers, collection_offers) = input.data;
+        let (activities, listings, token_offers, collection_offers, collections) = input.data;
 
         let mut deduped_activities: Vec<NftMarketplaceActivity> = activities
             .into_iter()
@@ -119,6 +124,13 @@ impl Processable for DBWritingStep {
 
         deduped_collection_offers.sort_by(|a, b| a.collection_offer_id.cmp(&b.collection_offer_id));
 
+        let deduped_collections: Vec<Collection> = collections
+            .into_iter()
+            .map(|collection| (collection.slug.clone(), collection))
+            .collect::<HashMap<_, _>>()
+            .into_values()
+            .collect();
+
         // Execute DB operations with sorted, deduplicated data
         let activities_result = execute_in_chunks(
             self.db_pool.clone(),
@@ -148,11 +160,25 @@ impl Processable for DBWritingStep {
             200,
         );
 
-        let (activities_result, listings_result, token_offers_result, collection_offers_result) = tokio::join!(
+        let collection_result = execute_in_chunks(
+            self.db_pool.clone(),
+            insert_collection,
+            &deduped_collections,
+            200,
+        );
+
+        let (
             activities_result,
             listings_result,
             token_offers_result,
-            collection_offers_result
+            collection_offers_result,
+            collection_result,
+        ) = tokio::join!(
+            activities_result,
+            listings_result,
+            token_offers_result,
+            collection_offers_result,
+            collection_result,
         );
 
         for result in [
@@ -160,6 +186,7 @@ impl Processable for DBWritingStep {
             listings_result,
             token_offers_result,
             collection_offers_result,
+            collection_result,
         ] {
             match result {
                 Ok(_) => (),
@@ -271,4 +298,16 @@ pub fn insert_current_nft_marketplace_collection_offers(
             bid_key.eq(excluded(bid_key)),
         ))
         .filter(last_transaction_version.le(excluded(last_transaction_version)))
+}
+
+pub fn insert_collection(
+    items_to_insert: Vec<Collection>,
+) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
+    use crate::schema::collections::dsl::*;
+
+    diesel::insert_into(schema::collections::table)
+        .values(items_to_insert)
+        .on_conflict(slug)
+        .do_update()
+        .set(supply.eq(excluded(supply)))
 }
