@@ -133,8 +133,6 @@ diesel::table! {
 diesel::table! {
     nfts (id) {
         id -> Uuid,
-        #[max_length = 10]
-        media_type -> Nullable<Varchar>,
         #[max_length = 512]
         media_url -> Nullable<Varchar>,
         #[max_length = 128]

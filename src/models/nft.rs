@@ -14,7 +14,6 @@ use uuid::Uuid;
 #[diesel(table_name = nfts)]
 pub struct Nft {
     pub id: Option<Uuid>,
-    pub media_type: Option<String>,
     pub media_url: Option<String>,
     pub name: Option<String>,
     pub owner: Option<String>,
@@ -31,7 +30,6 @@ impl Nft {
 
         Nft {
             id: Some(id),
-            media_type: None,
             media_url: uri,
             name: None,
             owner: None,
@@ -46,7 +44,6 @@ impl Nft {
 
         Nft {
             id: None,
-            media_type: None,
             media_url: None,
             name: None,
             owner: None,

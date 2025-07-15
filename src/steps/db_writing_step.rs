@@ -336,5 +336,6 @@ pub fn insert_nfts(
     diesel::insert_into(schema::nfts::table)
         .values(items_to_insert)
         .on_conflict(id)
-        .do_nothing()
+        .do_update()
+        .set((name.eq(excluded(name)), media_url.eq(excluded(media_url))))
 }
