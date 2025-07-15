@@ -22,18 +22,8 @@ diesel::table! {
         supply -> Nullable<Int8>,
         #[max_length = 128]
         title -> Nullable<Varchar>,
-        #[max_length = 66]
-        twitter -> Nullable<Varchar>,
-        usd_volume -> Nullable<Int8>,
-        verified -> Nullable<Bool>,
-        volume -> Nullable<Int8>,
-        #[max_length = 128]
-        website -> Nullable<Varchar>,
-        floor -> Nullable<Int8>,
-        #[max_length = 66]
-        discord -> Nullable<Varchar>,
         description -> Nullable<Text>,
-        #[max_length = 128]
+        #[max_length = 512]
         cover_url -> Nullable<Varchar>,
     }
 }
@@ -141,6 +131,24 @@ diesel::table! {
 }
 
 diesel::table! {
+    nfts (id) {
+        id -> Uuid,
+        #[max_length = 10]
+        media_type -> Nullable<Varchar>,
+        #[max_length = 512]
+        media_url -> Nullable<Varchar>,
+        #[max_length = 128]
+        name -> Nullable<Varchar>,
+        #[max_length = 66]
+        owner -> Nullable<Varchar>,
+        collection_id -> Nullable<Uuid>,
+        #[max_length = 66]
+        token_id -> Nullable<Varchar>,
+        burned -> Nullable<Bool>,
+    }
+}
+
+diesel::table! {
     processor_status (processor) {
         #[max_length = 100]
         processor -> Varchar,
@@ -157,5 +165,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     current_nft_marketplace_listings,
     current_nft_marketplace_token_offers,
     nft_marketplace_activities,
+    nfts,
     processor_status,
 );
