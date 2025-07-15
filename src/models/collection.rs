@@ -6,7 +6,7 @@ use aptos_indexer_processor_sdk::{
         extract::Aggregator,
     },
 };
-use bigdecimal::{BigDecimal, ToPrimitive};
+use bigdecimal::{BigDecimal, ToPrimitive, Zero};
 use diesel::prelude::*;
 use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
@@ -22,69 +22,96 @@ pub struct Collection {
     pub slug: Option<String>,
     pub supply: Option<i64>,
     pub title: Option<String>,
-    pub twitter: Option<String>,
-    pub usd_volume: Option<i64>,
-    pub verified: Option<bool>,
-    pub volume: Option<i64>,
-    pub website: Option<String>,
-    pub floor: Option<i64>,
-    pub discord: Option<String>,
     pub description: Option<String>,
     pub cover_url: Option<String>,
 }
 
 impl Collection {
-    pub fn get_from_write_resource(
-        resource: &WriteResource,
-        metadata: &CollectionMetadata,
-    ) -> anyhow::Result<Option<Collection>> {
-        if resource.type_str != "0x4::collection::Collection".to_string() {
-            return Ok(None);
-        }
+    pub fn new(collection_id: &str) -> Self {
+        let collection_id = standardize_address(&collection_id);
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
 
-        let inner = serde_json::from_str::<CollectionInfo>(resource.data.as_str())
-            .map_err(anyhow::Error::msg)?;
-        let collection = Collection {
-            id: None,
-            slug: Some(standardize_address(&resource.address)),
-            supply: Some(metadata.supply.to_i64().unwrap_or_default()),
-            title: Some(inner.name),
-            twitter: None,
-            usd_volume: None,
-            verified: None,
-            volume: None,
-            website: None,
-            floor: None,
-            discord: None,
-            description: Some(inner.description),
-            cover_url: Some(inner.uri),
+        Collection {
+            id: Some(id),
+            slug: Some(collection_id),
+            supply: None,
+            title: None,
+            description: None,
+            cover_url: None,
+        }
+    }
+
+    pub fn new_from_resource(resource: &WriteResource) -> Self {
+        let slug = standardize_address(&resource.address);
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, slug.as_bytes());
+
+        Collection {
+            id: Some(id),
+            slug: Some(slug),
+            supply: None,
+            title: None,
+            description: None,
+            cover_url: None,
+        }
+    }
+
+    pub fn set_supply_from_write_resource(mut self, resource: &WriteResource) -> Self {
+        let resource_data = resource.data.as_str();
+        let supply = if &resource.type_str == "0x4::collection::ConcurrentSupply" {
+            let supply = serde_json::from_str::<ConcurrentSupplyStruct>(resource_data)
+                .map_or(BigDecimal::zero(), |supply| supply.current_supply.value);
+            Some(supply)
+        } else if &resource.type_str == "0x4::collection::FixedSupply" {
+            let supply = serde_json::from_str::<FixedSupplyStruct>(resource_data)
+                .map_or(BigDecimal::zero(), |supply| supply.current_supply);
+            Some(supply)
+        } else if &resource.type_str == "0x4::collection::UnlimitedSupply" {
+            let supply = serde_json::from_str::<UnlimitedSupplyStruct>(resource_data)
+                .map_or(BigDecimal::zero(), |supply| supply.current_supply);
+            Some(supply)
+        } else {
+            None
         };
 
-        Ok(Some(collection))
+        if supply.is_some() {
+            self.supply = Some(supply.unwrap_or_default().to_i64().unwrap_or_default());
+        }
+
+        self
+    }
+
+    pub fn set_collection_info_from_write_resource(mut self, resource: &WriteResource) -> Self {
+        if &resource.type_str == "0x4::collection::Collection" {
+            if let Some(inner) =
+                serde_json::from_str::<CollectionStruct>(resource.data.as_str()).ok()
+            {
+                self.title = Some(inner.name);
+                self.description = Some(inner.description);
+                self.cover_url = Some(inner.uri);
+            }
+        }
+
+        self
     }
 }
 
+// Struct from the contract
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CollectionInfo {
+pub struct CollectionStruct {
     pub creator: String,
     pub description: String,
     pub name: String,
     pub uri: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct CollectionMetadata {
-    pub supply: BigDecimal,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ConcurrentSupply {
+pub struct ConcurrentSupplyStruct {
     pub current_supply: Aggregator,
     pub total_minted: Aggregator,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct FixedSupply {
+pub struct FixedSupplyStruct {
     #[serde(deserialize_with = "deserialize_from_string")]
     pub current_supply: BigDecimal,
     #[serde(deserialize_with = "deserialize_from_string")]
@@ -94,9 +121,15 @@ pub struct FixedSupply {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct UnlimitedSupply {
+pub struct UnlimitedSupplyStruct {
     #[serde(deserialize_with = "deserialize_from_string")]
     pub current_supply: BigDecimal,
     #[serde(deserialize_with = "deserialize_from_string")]
     pub total_minted: BigDecimal,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MintEvent {
+    pub collection: String,
+    pub token: String,
 }

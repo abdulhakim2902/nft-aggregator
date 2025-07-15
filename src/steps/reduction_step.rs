@@ -2,6 +2,7 @@ use crate::{
     config::marketplace_config::MarketplaceEventType,
     models::{
         collection::Collection,
+        nft::Nft,
         nft_models::{
             CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
@@ -96,6 +97,7 @@ impl Processable for NFTReductionStep {
         Vec<CurrentNFTMarketplaceTokenOffer>,
         Vec<CurrentNFTMarketplaceCollectionOffer>,
         Vec<Collection>,
+        Vec<Nft>,
         HashMap<String, HashMap<String, String>>,
     );
     type Output = (
@@ -104,6 +106,7 @@ impl Processable for NFTReductionStep {
         Vec<CurrentNFTMarketplaceTokenOffer>,
         Vec<CurrentNFTMarketplaceCollectionOffer>,
         Vec<Collection>,
+        Vec<Nft>,
     );
     type RunType = AsyncRunType;
 
@@ -117,6 +120,7 @@ impl Processable for NFTReductionStep {
             current_token_offers,
             current_collection_offers,
             collections,
+            nfts,
             resource_updates,
         ) = transactions.data;
 
@@ -183,6 +187,7 @@ impl Processable for NFTReductionStep {
                 reduced_data.2,
                 reduced_data.3,
                 collections,
+                nfts,
             ),
             metadata: transactions.metadata,
         }))

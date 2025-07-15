@@ -3,6 +3,7 @@ use crate::{
     config::marketplace_config::NFTMarketplaceConfig,
     models::{
         collection::Collection,
+        nft::Nft,
         nft_models::{
             CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenOffer, NftMarketplaceActivity,
@@ -54,6 +55,7 @@ impl Processable for ProcessStep {
         Vec<CurrentNFTMarketplaceTokenOffer>,
         Vec<CurrentNFTMarketplaceCollectionOffer>,
         Vec<Collection>,
+        Vec<Nft>,
         HashMap<String, HashMap<String, String>>,
     );
     type RunType = AsyncRunType;
@@ -69,6 +71,7 @@ impl Processable for ProcessStep {
                 Vec<CurrentNFTMarketplaceTokenOffer>,
                 Vec<CurrentNFTMarketplaceCollectionOffer>,
                 Vec<Collection>,
+                Vec<Nft>,
                 HashMap<String, HashMap<String, String>>,
             )>,
         >,
@@ -80,7 +83,7 @@ impl Processable for ProcessStep {
             .map(|transaction| {
                 let event_remapper = self.event_remapper.clone();
                 let resource_remapper = self.resource_remapper.clone();
-                let (activities, listings, token_offers, collection_offers, collections) =
+                let (activities, listings, token_offers, collection_offers, collections, nfts) =
                     event_remapper.remap_events(transaction.clone())?;
 
                 let resource_updates = resource_remapper.remap_resources(transaction.clone())?;
@@ -92,6 +95,7 @@ impl Processable for ProcessStep {
                     collection_offers,
                     resource_updates,
                     collections,
+                    nfts,
                 ))
             })
             .collect::<anyhow::Result<Vec<_>>>()
@@ -105,8 +109,10 @@ impl Processable for ProcessStep {
             mut all_token_offers,
             mut all_collection_offers,
             mut all_collections,
+            mut all_nfts,
             mut all_resource_updates,
         ) = (
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -122,13 +128,15 @@ impl Processable for ProcessStep {
             collection_offers,
             resource_updates,
             collections,
+            nfts,
         ) in results
         {
             all_activities.extend(activities);
             all_listings.extend(listings);
             all_token_offers.extend(token_offers);
-            all_collections.extend(collections);
             all_collection_offers.extend(collection_offers);
+            all_collections.extend(collections);
+            all_nfts.extend(nfts);
 
             // Merge resource_updates by key
             resource_updates.into_iter().for_each(|(key, value_map)| {
@@ -155,6 +163,7 @@ impl Processable for ProcessStep {
                 all_token_offers,
                 all_collection_offers,
                 all_collections,
+                all_nfts,
                 all_resource_updates,
             ),
             metadata: transactions.metadata,

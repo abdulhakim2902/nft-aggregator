@@ -3,9 +3,8 @@ use crate::{
         EventFieldRemappings, EventType, MarketplaceEventType, NFTMarketplaceConfig,
     },
     models::{
-        collection::{
-            Collection, CollectionMetadata, ConcurrentSupply, FixedSupply, UnlimitedSupply,
-        },
+        collection::{Collection, MintEvent},
+        nft::Nft,
         nft_models::{
             CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
@@ -24,7 +23,6 @@ use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::{transaction::TxnData, write_set_change::Change, Transaction},
     utils::{convert::standardize_address, extract::hash_str},
 };
-use bigdecimal::BigDecimal;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tracing::{debug, warn};
 
@@ -81,65 +79,45 @@ impl EventRemapper {
         Vec<CurrentNFTMarketplaceTokenOffer>,
         Vec<CurrentNFTMarketplaceCollectionOffer>,
         Vec<Collection>,
+        Vec<Nft>,
     )> {
         let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
         let mut current_token_offers: Vec<CurrentNFTMarketplaceTokenOffer> = Vec::new();
         let mut current_collection_offers: Vec<CurrentNFTMarketplaceCollectionOffer> = Vec::new();
         let mut current_listings: Vec<CurrentNFTMarketplaceListing> = Vec::new();
-        let mut collections: Vec<Collection> = Vec::new();
+
+        let mut collection_data: HashMap<String, Collection> = HashMap::new();
+        let mut nft_data: HashMap<String, Nft> = HashMap::new();
 
         let transaction_info = txn.info.as_ref();
         let txn_timestamp =
             parse_timestamp(txn.timestamp.as_ref().unwrap(), txn.version as i64).naive_utc();
 
         if let Some(transaction_info) = transaction_info {
-            let mut collection_metadata: HashMap<String, CollectionMetadata> = HashMap::new();
-
             for wsc in transaction_info.changes.iter() {
                 match wsc.change.as_ref().unwrap() {
                     Change::WriteResource(resource) => {
                         let address = standardize_address(&resource.address);
                         if resource.type_str.starts_with("0x4::collection") {
-                            let mut metadata = collection_metadata
+                            let collection = collection_data
                                 .get(&address)
                                 .cloned()
-                                .unwrap_or_default();
+                                .unwrap_or(Collection::new_from_resource(&resource))
+                                .set_collection_info_from_write_resource(&resource)
+                                .set_supply_from_write_resource(&resource);
 
-                            let resource_data = resource.data.as_str();
-                            if &resource.type_str == "0x4::collection::ConcurrentSupply" {
-                                let concurrent_supply =
-                                    serde_json::from_str::<ConcurrentSupply>(resource_data)
-                                        .map_err(anyhow::Error::msg)?;
-                                metadata.supply = concurrent_supply.current_supply.value;
-                            } else if &resource.type_str == "0x4::collection::FixedSupply" {
-                                let fixed_supply =
-                                    serde_json::from_str::<FixedSupply>(resource_data)
-                                        .map_err(anyhow::Error::msg)?;
-                                metadata.supply = fixed_supply.current_supply;
-                            } else if &resource.type_str == "0x4::collection::UnlimitedSupply" {
-                                let unlimited_supply =
-                                    serde_json::from_str::<UnlimitedSupply>(resource_data)
-                                        .map_err(anyhow::Error::msg)?;
-                                metadata.supply = unlimited_supply.current_supply;
-                            } else {
-                                metadata.supply = BigDecimal::from(0);
-                            }
-
-                            collection_metadata.insert(address, metadata);
+                            collection_data.insert(address.clone(), collection);
                         }
-                    },
-                    _ => {},
-                }
-            }
 
-            for wsc in transaction_info.changes.iter() {
-                match wsc.change.as_ref().unwrap() {
-                    Change::WriteResource(resource) => {
-                        let addr = standardize_address(&resource.address);
-                        let metadata = collection_metadata.get(&addr).cloned().unwrap_or_default();
-                        let collection = Collection::get_from_write_resource(resource, &metadata)?;
-                        if let Some(collection) = collection {
-                            collections.push(collection);
+                        if resource.type_str.starts_with("0x4::token") {
+                            let nft = nft_data
+                                .get(&address)
+                                .cloned()
+                                .unwrap_or(Nft::new_from_resource(&resource))
+                                .set_nft_name_from_write_resource(&resource)
+                                .set_nft_info_from_write_resource(&resource);
+
+                            nft_data.insert(address.clone(), nft);
                         }
                     },
                     _ => {},
@@ -425,8 +403,29 @@ impl EventRemapper {
                         debug!("Secondary model validation failed, skipping: {:?}", model);
                     }
                 }
+            } else if event.type_.as_str() == "0x4::collection::Mint" {
+                if let Some(mint_event) = serde_json::from_value::<MintEvent>(event.data).ok() {
+                    let collection_id = standardize_address(&mint_event.collection);
+                    let collection = collection_data
+                        .get(&collection_id)
+                        .cloned()
+                        .unwrap_or(Collection::new(&collection_id));
+
+                    collection_data.insert(collection_id.clone(), collection);
+
+                    let token_id = standardize_address(&mint_event.token);
+                    let nft = nft_data
+                        .get(&token_id)
+                        .cloned()
+                        .unwrap_or(Nft::new(&collection_id, &token_id));
+
+                    nft_data.insert(token_id, nft);
+                };
             }
         }
+
+        let collections = collection_data.into_values().collect::<Vec<Collection>>();
+        let nfts = nft_data.into_values().collect::<Vec<Nft>>();
 
         Ok((
             activities,
@@ -434,6 +433,7 @@ impl EventRemapper {
             current_token_offers,
             current_collection_offers,
             collections,
+            nfts,
         ))
     }
 
@@ -704,7 +704,7 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers, _) =
+        let (activities, listings, token_offers, collection_offers, _collection_data, _nft_data) =
             remapper.remap_events(transaction)?;
 
         // Verify results
@@ -816,7 +816,7 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers, _) =
+        let (activities, listings, token_offers, collection_offers, _collection_data, _nft_data) =
             remapper.remap_events(transaction)?;
 
         // Verify results
@@ -930,7 +930,7 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers, _) =
+        let (activities, listings, token_offers, collection_offers, _collection_data, _nft_data) =
             remapper.remap_events(transaction)?;
 
         // Verify results
@@ -1037,7 +1037,7 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers, _) =
+        let (activities, listings, token_offers, collection_offers, _collection_data, _nft_data) =
             remapper.remap_events(transaction)?;
 
         // Verify results
@@ -1172,7 +1172,7 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers, _) =
+        let (activities, listings, token_offers, collection_offers, _collection_data, _nft_data) =
             remapper.remap_events(transaction)?;
 
         // Verify results
