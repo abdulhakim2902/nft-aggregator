@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS nfts (
   -- Add staked BOOLEAN DEFAULT false,
   -- Add staked_contract_id uuid DEFAULT NULL,
   -- Add staked_owner VARCHAR(66),
-  token_id VARCHAR(66),
+  token_id VARCHAR(128),
   -- Add trading_pool_id uuid DEFAULT NULL,
   -- Add chain state
   -- Add asset name

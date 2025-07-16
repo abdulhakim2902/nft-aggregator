@@ -1,4 +1,4 @@
-use crate::schema::collections;
+use crate::{models::nft::TokenStruct, schema::collections};
 use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::WriteResource,
     utils::{
@@ -43,6 +43,26 @@ impl Collection {
             description,
             cover_url: uri,
         }
+    }
+
+    pub fn new_from_token_resource(resource: &WriteResource) -> Self {
+        if &resource.type_str == "0x4::token::Token" {
+            if let Some(inner) = serde_json::from_str::<TokenStruct>(resource.data.as_str()).ok() {
+                let collection_id = standardize_address(&inner.collection.inner);
+                let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
+
+                return Collection {
+                    id: Some(id),
+                    slug: Some(collection_id),
+                    title: None,
+                    cover_url: Some(inner.uri),
+                    description: Some(inner.description),
+                    supply: None,
+                };
+            }
+        }
+
+        Collection::default()
     }
 
     pub fn new_from_resource(resource: &WriteResource) -> Self {

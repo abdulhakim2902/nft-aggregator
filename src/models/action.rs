@@ -53,10 +53,7 @@ impl Action {
         collection_id: &str,
         token_id: &str,
     ) -> Self {
-        let collection_id = standardize_address(collection_id);
         let collection_uuid = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
-
-        let token_id = standardize_address(token_id);
         let token_uuid = Uuid::new_v5(
             &Uuid::NAMESPACE_DNS,
             format!("{}::{}", collection_id, token_id).as_bytes(),

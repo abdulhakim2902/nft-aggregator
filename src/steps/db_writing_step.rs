@@ -1,5 +1,6 @@
 use crate::{
     models::{
+        action::Action,
         collection::Collection,
         nft::Nft,
         nft_models::{
@@ -43,6 +44,7 @@ impl Processable for DBWritingStep {
         Vec<CurrentNFTMarketplaceCollectionOffer>,
         Vec<Collection>,
         Vec<Nft>,
+        Vec<Action>,
     );
     type Output = ();
     type RunType = AsyncRunType;
@@ -56,9 +58,11 @@ impl Processable for DBWritingStep {
             Vec<CurrentNFTMarketplaceCollectionOffer>,
             Vec<Collection>,
             Vec<Nft>,
+            Vec<Action>,
         )>,
     ) -> Result<Option<TransactionContext<()>>, ProcessorError> {
-        let (activities, listings, token_offers, collection_offers, collections, nfts) = input.data;
+        let (activities, listings, token_offers, collection_offers, collections, nfts, actions) =
+            input.data;
 
         let mut deduped_activities: Vec<NftMarketplaceActivity> = activities
             .into_iter()
@@ -142,6 +146,13 @@ impl Processable for DBWritingStep {
             .into_values()
             .collect();
 
+        let deduped_actions: Vec<Action> = actions
+            .into_iter()
+            .map(|action| (action.id.clone(), action))
+            .collect::<HashMap<_, _>>()
+            .into_values()
+            .collect();
+
         // Execute DB operations with sorted, deduplicated data
         let activities_result = execute_in_chunks(
             self.db_pool.clone(),
@@ -178,6 +189,9 @@ impl Processable for DBWritingStep {
             200,
         );
 
+        let action_result =
+            execute_in_chunks(self.db_pool.clone(), insert_actions, &deduped_actions, 200);
+
         let nft_result = execute_in_chunks(self.db_pool.clone(), insert_nfts, &deduped_nfts, 200);
 
         let (
@@ -187,6 +201,7 @@ impl Processable for DBWritingStep {
             collection_offers_result,
             collection_result,
             nft_result,
+            action_result,
         ) = tokio::join!(
             activities_result,
             listings_result,
@@ -194,6 +209,7 @@ impl Processable for DBWritingStep {
             collection_offers_result,
             collection_result,
             nft_result,
+            action_result,
         );
 
         for result in [
@@ -203,6 +219,7 @@ impl Processable for DBWritingStep {
             collection_offers_result,
             collection_result,
             nft_result,
+            action_result,
         ] {
             match result {
                 Ok(_) => (),
@@ -338,4 +355,15 @@ pub fn insert_nfts(
         .on_conflict(id)
         .do_update()
         .set((name.eq(excluded(name)), media_url.eq(excluded(media_url))))
+}
+
+pub fn insert_actions(
+    items_to_insert: Vec<Action>,
+) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
+    use crate::schema::actions::dsl::*;
+
+    diesel::insert_into(schema::actions::table)
+        .values(items_to_insert)
+        .on_conflict(id)
+        .do_nothing()
 }

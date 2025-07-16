@@ -126,6 +126,7 @@ impl EventRemapper {
                     }
 
                     if resource.type_str.starts_with("0x4::token") {
+                        let collection = Collection::new_from_token_resource(&resource);
                         let nft = nft_data
                             .get(&address)
                             .cloned()
@@ -133,7 +134,11 @@ impl EventRemapper {
                             .set_nft_name_from_write_resource(&resource)
                             .set_nft_info_from_write_resource(&resource);
 
+                        let collection_id = collection.slug.clone().unwrap();
                         nft_data.insert(address.clone(), nft);
+                        if collection_data.get(&collection_id).is_none() {
+                            collection_data.insert(collection_id, collection);
+                        };
                     }
                 },
                 _ => {},

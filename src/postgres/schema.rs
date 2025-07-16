@@ -160,7 +160,7 @@ diesel::table! {
         #[max_length = 66]
         owner -> Nullable<Varchar>,
         collection_id -> Nullable<Uuid>,
-        #[max_length = 66]
+        #[max_length = 128]
         token_id -> Nullable<Varchar>,
         burned -> Nullable<Bool>,
     }
