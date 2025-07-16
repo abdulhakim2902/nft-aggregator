@@ -1,6 +1,26 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    actions (id) {
+        id -> Uuid,
+        #[max_length = 30]
+        tx_type -> Varchar,
+        tx_index -> Int8,
+        #[max_length = 66]
+        tx_id -> Varchar,
+        #[max_length = 66]
+        sender -> Nullable<Varchar>,
+        #[max_length = 66]
+        receiver -> Nullable<Varchar>,
+        price -> Nullable<Int8>,
+        nft_id -> Uuid,
+        collection_id -> Uuid,
+        block_time -> Timestamptz,
+        block_height -> Int8,
+    }
+}
+
+diesel::table! {
     backfill_processor_status (backfill_alias) {
         #[max_length = 100]
         backfill_alias -> Varchar,
@@ -157,6 +177,7 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
+    actions,
     backfill_processor_status,
     collections,
     current_nft_marketplace_collection_offers,

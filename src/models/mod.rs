@@ -1,3 +1,4 @@
+pub mod action;
 pub mod collection;
 pub mod nft;
 pub mod nft_models;
@@ -92,5 +93,13 @@ impl EventModel {
             }
         }
         Ok(result)
+    }
+
+    pub fn get_data(&self) -> serde_json::Value {
+        self.data.clone()
+    }
+
+    pub fn get_tx_index(&self) -> i64 {
+        self.transaction_version * 100_000 + self.event_index
     }
 }

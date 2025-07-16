@@ -3,8 +3,9 @@ use crate::{
         EventFieldRemappings, EventType, MarketplaceEventType, NFTMarketplaceConfig,
     },
     models::{
-        collection::{Collection, CreateTokenDataEvent, MintEvent},
-        nft::Nft,
+        action::Action,
+        collection::{Collection, CreateTokenDataEvent, DepositEvent, MintEvent, MintTokenEvent},
+        nft::{Nft, TransferEvent},
         nft_models::{
             CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
@@ -80,7 +81,21 @@ impl EventRemapper {
         Vec<CurrentNFTMarketplaceCollectionOffer>,
         Vec<Collection>,
         Vec<Nft>,
+        Vec<Action>,
     )> {
+        let transaction_info = txn.info.as_ref();
+        if transaction_info.is_none() {
+            return Ok((
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ));
+        }
+
         let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
         let mut current_token_offers: Vec<CurrentNFTMarketplaceTokenOffer> = Vec::new();
         let mut current_collection_offers: Vec<CurrentNFTMarketplaceCollectionOffer> = Vec::new();
@@ -88,46 +103,480 @@ impl EventRemapper {
 
         let mut collection_data: HashMap<String, Collection> = HashMap::new();
         let mut nft_data: HashMap<String, Nft> = HashMap::new();
+        let mut action_data: HashMap<String, Action> = HashMap::new();
 
-        let transaction_info = txn.info.as_ref();
+        let transaction_info = transaction_info.unwrap();
+        let transaction_id = format!("0x{}", hex::encode(transaction_info.hash.clone()));
         let txn_timestamp =
             parse_timestamp(txn.timestamp.as_ref().unwrap(), txn.version as i64).naive_utc();
 
-        if let Some(transaction_info) = transaction_info {
-            for wsc in transaction_info.changes.iter() {
-                match wsc.change.as_ref().unwrap() {
-                    Change::WriteResource(resource) => {
-                        let address = standardize_address(&resource.address);
-                        if resource.type_str.starts_with("0x4::collection") {
-                            let collection = collection_data
-                                .get(&address)
-                                .cloned()
-                                .unwrap_or(Collection::new_from_resource(&resource))
-                                .set_collection_info_from_write_resource(&resource)
-                                .set_supply_from_write_resource(&resource);
+        for wsc in transaction_info.changes.iter() {
+            match wsc.change.as_ref().unwrap() {
+                Change::WriteResource(resource) => {
+                    let address = standardize_address(&resource.address);
+                    if resource.type_str.starts_with("0x4::collection") {
+                        let collection = collection_data
+                            .get(&address)
+                            .cloned()
+                            .unwrap_or(Collection::new_from_resource(&resource))
+                            .set_collection_info_from_write_resource(&resource)
+                            .set_supply_from_write_resource(&resource);
 
-                            collection_data.insert(address.clone(), collection);
-                        }
+                        collection_data.insert(address.clone(), collection);
+                    }
 
-                        if resource.type_str.starts_with("0x4::token") {
-                            let nft = nft_data
-                                .get(&address)
-                                .cloned()
-                                .unwrap_or(Nft::new_from_resource(&resource))
-                                .set_nft_name_from_write_resource(&resource)
-                                .set_nft_info_from_write_resource(&resource);
+                    if resource.type_str.starts_with("0x4::token") {
+                        let nft = nft_data
+                            .get(&address)
+                            .cloned()
+                            .unwrap_or(Nft::new_from_resource(&resource))
+                            .set_nft_name_from_write_resource(&resource)
+                            .set_nft_info_from_write_resource(&resource);
 
-                            nft_data.insert(address.clone(), nft);
-                        }
-                    },
-                    _ => {},
-                }
+                        nft_data.insert(address.clone(), nft);
+                    }
+                },
+                _ => {},
             }
         }
 
         let events = self.get_events(Arc::new(txn))?;
 
-        for event in events {
+        for event in events.iter() {
+            match event.type_.as_str() {
+                // Example: 0xded17be0c08ff93b32339c27999ce2603155a76f8ad21ad1969a6072b0b21700
+                "0x3::token::CreateTokenDataEvent" => {
+                    let create_token_event =
+                        serde_json::from_value::<CreateTokenDataEvent>(event.data.clone())?;
+
+                    let collection_id = create_token_event.get_collection_id();
+                    let name = create_token_event.id.name.as_str();
+                    let description = create_token_event.description.as_str();
+                    let uri = create_token_event.uri.as_str();
+
+                    let token_id = create_token_event.get_token_id();
+
+                    let nft = Nft::new(&collection_id, &token_id, Some(uri.to_string()));
+                    let collection = Collection::new(
+                        &collection_id,
+                        Some(name.to_string()),
+                        Some(description.to_string()),
+                        Some(uri.to_string()),
+                    );
+
+                    collection_data.insert(collection_id, collection);
+                    nft_data.insert(token_id, nft);
+                },
+                // Example: 0x621f3e938779e93e08254327e4dd71783cf3ce6136c6d03e2fe9c6d7816a57f1
+                "0x4::collection::Mint" => {
+                    let mint_event = serde_json::from_value::<MintEvent>(event.data.clone())?;
+                    let collection_id = standardize_address(&mint_event.collection);
+                    let collection = collection_data
+                        .get(&collection_id)
+                        .cloned()
+                        .unwrap_or(Collection::new(&collection_id, None, None, None));
+
+                    let token_id = standardize_address(&mint_event.token);
+                    let nft = nft_data.get(&token_id).cloned().unwrap_or(Nft::new(
+                        &collection_id,
+                        &token_id,
+                        None,
+                    ));
+
+                    let action = Action::new_from_mint_event(
+                        event,
+                        &transaction_id,
+                        &collection_id,
+                        &token_id,
+                    );
+
+                    let action_key = format!("{}::mint", token_id.clone());
+
+                    collection_data.insert(collection_id, collection);
+                    nft_data.insert(token_id, nft);
+                    action_data.insert(action_key, action);
+                },
+                // Example: 0x30b4634d13b4f95227e3eb398c2a5d15ecff4d1732a93e89a4febc72d104a3e4
+                "0x4::collection::MintEvent" => {
+                    let collection_id = standardize_address(&event.account_address);
+                    let mint_event = serde_json::from_value::<MintEvent>(event.data.clone())?;
+                    let token_id = standardize_address(&mint_event.token);
+
+                    let action = Action::new_from_mint_event(
+                        event,
+                        &transaction_id,
+                        &collection_id,
+                        &token_id,
+                    );
+
+                    let action_key = format!("{}::mint", token_id);
+                    action_data.insert(action_key, action);
+                },
+                // Example: 0xded17be0c08ff93b32339c27999ce2603155a76f8ad21ad1969a6072b0b21700
+                "0x3::token::MintTokenEvent" => {
+                    let mint_token_event =
+                        serde_json::from_value::<MintTokenEvent>(event.data.clone())?;
+
+                    let collection_id = mint_token_event.get_collection_id();
+                    let token_id = mint_token_event.get_token_id();
+                    let name = mint_token_event.id.name.as_str();
+
+                    let nft = Nft::new(&collection_id, &token_id, None);
+                    let collection =
+                        Collection::new(&collection_id, Some(name.to_string()), None, None);
+
+                    let action = Action::new_from_mint_token_event(
+                        event,
+                        &transaction_id,
+                        &collection_id,
+                        &token_id,
+                    );
+
+                    let action_key = format!("{}::mint", token_id);
+                    action_data.insert(action_key, action);
+                    collection_data.insert(collection_id, collection);
+                    nft_data.insert(token_id, nft);
+                },
+                // Example: 0xded17be0c08ff93b32339c27999ce2603155a76f8ad21ad1969a6072b0b21700
+                "0x3::token::DepositEvent" => {
+                    let receiver = standardize_address(&event.account_address);
+                    let deposit_event = serde_json::from_value::<DepositEvent>(event.data.clone())?;
+
+                    let token_id = deposit_event.get_token_id();
+
+                    let action_key = format!("{}::mint", token_id.as_str());
+                    if let Some(mut action) = action_data.get(&action_key).cloned() {
+                        action.receiver = Some(receiver.clone());
+                        action_data.insert(action_key, action);
+                    }
+
+                    if let Some(mut nft) = nft_data.get(&token_id).cloned() {
+                        nft.owner = Some(receiver.clone());
+                        nft_data.insert(token_id.clone(), nft);
+                    }
+                },
+                // Example: 0x8cc548e83e2e6926418224980f1381be989404e2e21375522aefc08fb84bd24a
+                "0x1::object::TransferEvent" => {
+                    let transfer_event =
+                        serde_json::from_value::<TransferEvent>(event.data.clone())?;
+
+                    if let Some(mut nft) = nft_data.get(&transfer_event.object).cloned() {
+                        nft.owner = Some(standardize_address(&transfer_event.to));
+                        nft_data.insert(transfer_event.object.clone(), nft.clone());
+
+                        let transfer_key = format!("{}::transfer", transfer_event.object.as_str());
+                        if nft.collection_id.is_some() && nft.token_id.is_some() {
+                            let mut transfer_action = Action::new_from_transfer_event(
+                                event,
+                                &transaction_id,
+                                nft.clone().collection_id.unwrap(),
+                                nft.id.unwrap(),
+                            );
+
+                            transfer_action.sender =
+                                Some(standardize_address(&transfer_event.from));
+                            transfer_action.receiver =
+                                Some(standardize_address(&transfer_event.to));
+                            action_data.insert(transfer_key, transfer_action);
+                        }
+                    }
+
+                    let mint_key = format!("{}::mint", transfer_event.object.as_str());
+                    if let Some(mut action) = action_data.get(&mint_key).cloned() {
+                        action.receiver = Some(standardize_address(&transfer_event.to));
+
+                        action_data.insert(mint_key, action);
+                    }
+                },
+                // ADD HANDLING FOR BURN EVENT
+                _ => {
+                    let remappings = self.field_remappings.get(&event.event_type);
+                    if remappings.is_none() {
+                        continue;
+                    }
+
+                    let remappings = remappings.unwrap();
+
+                    let mut activity = NftMarketplaceActivity {
+                        txn_version: event.transaction_version,
+                        index: event.event_index,
+                        marketplace: self.marketplace_name.clone(),
+                        contract_address: event.account_address.clone(),
+                        block_timestamp: txn_timestamp,
+                        raw_event_type: event.event_type.to_string(),
+                        json_data: serde_json::to_value(&event).unwrap(),
+                        ..Default::default()
+                    };
+
+                    // Step 1: Create the appropriate second model based on event type
+                    let event_type_str = event.event_type.to_string();
+
+                    let mut secondary_model: Option<SecondaryModel> =
+                        match self.marketplace_event_type_mapping.get(&event_type_str) {
+                            Some(MarketplaceEventType::PlaceListing) => {
+                                activity.standard_event_type =
+                                    MarketplaceEventType::PlaceListing.to_string();
+                                Some(SecondaryModel::Listing(
+                                    CurrentNFTMarketplaceListing::build_default(
+                                        self.marketplace_name.clone(),
+                                        &event,
+                                        false,
+                                        MarketplaceEventType::PlaceListing.to_string(),
+                                    ),
+                                ))
+                            },
+                            Some(MarketplaceEventType::CancelListing) => {
+                                activity.standard_event_type =
+                                    MarketplaceEventType::CancelListing.to_string();
+                                Some(SecondaryModel::Listing(
+                                    CurrentNFTMarketplaceListing::build_default(
+                                        self.marketplace_name.clone(),
+                                        &event,
+                                        true,
+                                        MarketplaceEventType::CancelListing.to_string(),
+                                    ),
+                                ))
+                            },
+                            Some(MarketplaceEventType::FillListing) => {
+                                activity.standard_event_type =
+                                    MarketplaceEventType::FillListing.to_string();
+                                Some(SecondaryModel::Listing(
+                                    CurrentNFTMarketplaceListing::build_default(
+                                        self.marketplace_name.clone(),
+                                        &event,
+                                        true,
+                                        MarketplaceEventType::FillListing.to_string(),
+                                    ),
+                                ))
+                            },
+                            Some(MarketplaceEventType::PlaceTokenOffer) => {
+                                activity.standard_event_type =
+                                    MarketplaceEventType::PlaceTokenOffer.to_string();
+                                Some(SecondaryModel::TokenOffer(
+                                    CurrentNFTMarketplaceTokenOffer::build_default(
+                                        self.marketplace_name.clone(),
+                                        &event,
+                                        false,
+                                        MarketplaceEventType::PlaceTokenOffer.to_string(),
+                                    ),
+                                ))
+                            },
+                            Some(MarketplaceEventType::CancelTokenOffer) => {
+                                activity.standard_event_type =
+                                    MarketplaceEventType::CancelTokenOffer.to_string();
+                                Some(SecondaryModel::TokenOffer(
+                                    CurrentNFTMarketplaceTokenOffer::build_default(
+                                        self.marketplace_name.clone(),
+                                        &event,
+                                        true,
+                                        MarketplaceEventType::CancelTokenOffer.to_string(),
+                                    ),
+                                ))
+                            },
+                            Some(MarketplaceEventType::FillTokenOffer) => {
+                                activity.standard_event_type =
+                                    MarketplaceEventType::FillTokenOffer.to_string();
+                                Some(SecondaryModel::TokenOffer(
+                                    CurrentNFTMarketplaceTokenOffer::build_default(
+                                        self.marketplace_name.clone(),
+                                        &event,
+                                        true,
+                                        MarketplaceEventType::FillTokenOffer.to_string(),
+                                    ),
+                                ))
+                            },
+                            Some(MarketplaceEventType::PlaceCollectionOffer) => {
+                                activity.standard_event_type =
+                                    MarketplaceEventType::PlaceCollectionOffer.to_string();
+                                Some(SecondaryModel::CollectionOffer(
+                                    CurrentNFTMarketplaceCollectionOffer::build_default(
+                                        self.marketplace_name.clone(),
+                                        &event,
+                                        false,
+                                        MarketplaceEventType::PlaceCollectionOffer.to_string(),
+                                    ),
+                                ))
+                            },
+                            Some(MarketplaceEventType::CancelCollectionOffer) => {
+                                activity.standard_event_type =
+                                    MarketplaceEventType::CancelCollectionOffer.to_string();
+                                Some(SecondaryModel::CollectionOffer(
+                                    CurrentNFTMarketplaceCollectionOffer::build_default(
+                                        self.marketplace_name.clone(),
+                                        &event,
+                                        true,
+                                        MarketplaceEventType::CancelCollectionOffer.to_string(),
+                                    ),
+                                ))
+                            },
+                            Some(MarketplaceEventType::FillCollectionOffer) => {
+                                activity.standard_event_type =
+                                    MarketplaceEventType::FillCollectionOffer.to_string();
+                                Some(SecondaryModel::CollectionOffer(
+                                    CurrentNFTMarketplaceCollectionOffer::build_default(
+                                        self.marketplace_name.clone(),
+                                        &event,
+                                        true,
+                                        MarketplaceEventType::FillCollectionOffer.to_string(),
+                                    ),
+                                ))
+                            },
+                            Some(MarketplaceEventType::Unknown) => {
+                                warn!("Skipping unrecognized event type '{}'", event_type_str);
+                                continue;
+                            },
+                            None => {
+                                warn!("No remappings found for event type '{}'", event_type_str);
+                                continue;
+                            },
+                        };
+
+                    // Step 2: Build model structs from the values obtained by the JsonPaths
+                    remappings.iter().try_for_each(|(json_path, db_mappings)| {
+                        db_mappings.iter().try_for_each(|db_mapping| {
+                            // Extract value, continue on error instead of failing
+                            let extracted_value = match json_path.extract_from(&event.data) {
+                                Ok(value) => value,
+                                Err(e) => {
+                                    debug!(
+                                        "Failed to extract value for path {}: {}",
+                                        json_path.raw, e
+                                    );
+                                    return Ok::<(), anyhow::Error>(());
+                                },
+                            };
+
+                            let value = extracted_value
+                                .as_str()
+                                .map(|s| s.to_string())
+                                .or_else(|| extracted_value.as_u64().map(|n| n.to_string()))
+                                .unwrap_or_default();
+
+                            if value.is_empty() {
+                                debug!(
+                                    "Skipping empty value for path {} for column {}",
+                                    json_path.raw, db_mapping.column
+                                );
+                                return Ok(());
+                            }
+
+                            match TableType::from_str(db_mapping.table.as_str()) {
+                                Some(TableType::Activities) => {
+                                    match MarketplaceField::from_str(db_mapping.column.as_str()) {
+                                        Ok(field) => {
+                                            activity.set_field(field, value);
+                                        },
+                                        Err(e) => {
+                                            warn!(
+                                                "Skipping invalid field {}: {}",
+                                                db_mapping.column, e
+                                            );
+                                        },
+                                    }
+                                },
+                                Some(_) => {
+                                    if let Some(model) = &mut secondary_model {
+                                        match MarketplaceField::from_str(db_mapping.column.as_str())
+                                        {
+                                            Ok(field) => {
+                                                model.set_field(field, value);
+                                            },
+                                            Err(e) => {
+                                                warn!(
+                                                    "Skipping invalid field {}: {}",
+                                                    db_mapping.column, e
+                                                );
+                                            },
+                                        }
+                                    }
+                                },
+                                None => {
+                                    warn!("Unknown table: {}", db_mapping.table);
+                                    return Ok(());
+                                },
+                            }
+
+                            Ok(())
+                        })
+                    })?;
+
+                    // After processing all field remappings, generate necessary id fields if needed for PK
+                    if let Some(model) = &mut secondary_model {
+                        let creator_address = activity.creator_address.clone();
+                        let collection_name = activity.collection_name.clone();
+                        let token_name = activity.token_name.clone();
+
+                        match model {
+                            SecondaryModel::Listing(listing) => {
+                                self.generate_and_set_ids(
+                                    listing,
+                                    &mut activity,
+                                    &creator_address,
+                                    &collection_name,
+                                    &token_name,
+                                );
+                            },
+                            SecondaryModel::TokenOffer(token_offer) => {
+                                self.generate_and_set_ids(
+                                    token_offer,
+                                    &mut activity,
+                                    &creator_address,
+                                    &collection_name,
+                                    &token_name,
+                                );
+                            },
+                            SecondaryModel::CollectionOffer(collection_offer) => {
+                                self.generate_and_set_ids(
+                                    collection_offer,
+                                    &mut activity,
+                                    &creator_address,
+                                    &collection_name,
+                                    &token_name,
+                                );
+
+                                // Handle collection_offer_id separately since it's specific to collection offers
+                                if collection_offer.collection_offer_id.is_empty() {
+                                    if let Some(generated_collection_offer_id) =
+                                        generate_collection_offer_id(
+                                            creator_address,
+                                            activity.buyer.clone(),
+                                        )
+                                    {
+                                        collection_offer.collection_offer_id =
+                                            generated_collection_offer_id.clone();
+                                        activity.set_field(
+                                            MarketplaceField::CollectionOfferId,
+                                            generated_collection_offer_id,
+                                        );
+                                    }
+                                }
+                            },
+                        }
+                    }
+
+                    // Pass only if secondary model is valid
+                    if let Some(model) = secondary_model {
+                        if model.is_valid() {
+                            match model {
+                                SecondaryModel::Listing(listing) => {
+                                    activities.push(activity);
+                                    current_listings.push(listing);
+                                },
+                                SecondaryModel::TokenOffer(token_offer) => {
+                                    activities.push(activity);
+                                    current_token_offers.push(token_offer);
+                                },
+                                SecondaryModel::CollectionOffer(collection_offer) => {
+                                    activities.push(activity);
+                                    current_collection_offers.push(collection_offer);
+                                },
+                            }
+                        } else {
+                            debug!("Secondary model validation failed, skipping: {:?}", model);
+                        }
+                    }
+                },
+            }
             if let Some(remappings) = self.field_remappings.get(&event.event_type) {
                 let mut activity = NftMarketplaceActivity {
                     txn_version: event.transaction_version,
@@ -403,51 +852,12 @@ impl EventRemapper {
                         debug!("Secondary model validation failed, skipping: {:?}", model);
                     }
                 }
-            } else if event.type_.as_str() == "0x4::collection::Mint" {
-                if let Some(mint_event) = serde_json::from_value::<MintEvent>(event.data).ok() {
-                    let collection_id = standardize_address(&mint_event.collection);
-                    let collection = collection_data
-                        .get(&collection_id)
-                        .cloned()
-                        .unwrap_or(Collection::new(&collection_id, None, None, None));
-
-                    let token_id = standardize_address(&mint_event.token);
-                    let nft = nft_data.get(&token_id).cloned().unwrap_or(Nft::new(
-                        &collection_id,
-                        &token_id,
-                        None,
-                    ));
-
-                    collection_data.insert(collection_id, collection);
-                    nft_data.insert(token_id, nft);
-                };
-            } else if event.type_.as_str() == "0x3::token::CreateTokenDataEvent" {
-                if let Some(create_token_event) =
-                    serde_json::from_value::<CreateTokenDataEvent>(event.data).ok()
-                {
-                    let collection_id = create_token_event.get_collection_id();
-                    let name = create_token_event.id.name.as_str();
-                    let description = create_token_event.description.as_str();
-                    let uri = create_token_event.uri.as_str();
-
-                    let token_id = create_token_event.get_token_id();
-
-                    let nft = Nft::new(&collection_id, &token_id, Some(uri.to_string()));
-                    let collection = Collection::new(
-                        &collection_id,
-                        Some(name.to_string()),
-                        Some(description.to_string()),
-                        Some(uri.to_string()),
-                    );
-
-                    collection_data.insert(collection_id, collection);
-                    nft_data.insert(token_id, nft);
-                }
             }
         }
 
         let collections = collection_data.into_values().collect::<Vec<Collection>>();
         let nfts = nft_data.into_values().collect::<Vec<Nft>>();
+        let actions = action_data.into_values().collect::<Vec<Action>>();
 
         Ok((
             activities,
@@ -456,6 +866,7 @@ impl EventRemapper {
             current_collection_offers,
             collections,
             nfts,
+            actions,
         ))
     }
 
@@ -726,8 +1137,15 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers, _collection_data, _nft_data) =
-            remapper.remap_events(transaction)?;
+        let (
+            activities,
+            listings,
+            token_offers,
+            collection_offers,
+            _collection_data,
+            _nft_data,
+            _actions,
+        ) = remapper.remap_events(transaction)?;
 
         // Verify results
         assert_eq!(activities.len(), 1, "Should have one activity");
@@ -838,8 +1256,15 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers, _collection_data, _nft_data) =
-            remapper.remap_events(transaction)?;
+        let (
+            activities,
+            listings,
+            token_offers,
+            collection_offers,
+            _collection_data,
+            _nft_data,
+            _actions,
+        ) = remapper.remap_events(transaction)?;
 
         // Verify results
         assert_eq!(activities.len(), 1, "Should have one activity");
@@ -952,8 +1377,15 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers, _collection_data, _nft_data) =
-            remapper.remap_events(transaction)?;
+        let (
+            activities,
+            listings,
+            token_offers,
+            collection_offers,
+            _collection_data,
+            _nft_data,
+            _actions,
+        ) = remapper.remap_events(transaction)?;
 
         // Verify results
         assert_eq!(activities.len(), 1, "Should have one activity");
@@ -1059,8 +1491,15 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers, _collection_data, _nft_data) =
-            remapper.remap_events(transaction)?;
+        let (
+            activities,
+            listings,
+            token_offers,
+            collection_offers,
+            _collection_data,
+            _nft_data,
+            _actions,
+        ) = remapper.remap_events(transaction)?;
 
         // Verify results
         assert_eq!(activities.len(), 1, "Should have one activity");
@@ -1194,8 +1633,15 @@ mod tests {
 
         let remapper = EventRemapper::new(&config)?;
         let transaction = create_transaction(event_type, event_data);
-        let (activities, listings, token_offers, collection_offers, _collection_data, _nft_data) =
-            remapper.remap_events(transaction)?;
+        let (
+            activities,
+            listings,
+            token_offers,
+            collection_offers,
+            _collection_data,
+            _nft_data,
+            _actions,
+        ) = remapper.remap_events(transaction)?;
 
         // Verify results
         assert_eq!(activities.len(), 1, "Should have one activity");

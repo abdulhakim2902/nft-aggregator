@@ -33,12 +33,11 @@ impl Collection {
         description: Option<String>,
         uri: Option<String>,
     ) -> Self {
-        let collection_id = standardize_address(&collection_id);
         let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
 
         Collection {
             id: Some(id),
-            slug: Some(collection_id),
+            slug: Some(collection_id.to_lowercase()),
             supply: None,
             title: name,
             description,
@@ -136,6 +135,7 @@ pub struct UnlimitedSupplyStruct {
 // Event
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MintEvent {
+    #[serde(default)]
     pub collection: String,
     pub token: String,
 }
@@ -155,6 +155,21 @@ impl CreateTokenDataEvent {
 
     pub fn get_token_id(&self) -> String {
         self.name.replace(" ", "%20")
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MintTokenEvent {
+    pub id: CreateTokenDataIdStruct,
+}
+
+impl MintTokenEvent {
+    pub fn get_collection_id(&self) -> String {
+        self.id.get_collection_id()
+    }
+
+    pub fn get_token_id(&self) -> String {
+        self.id.name.replace(" ", "%20")
     }
 }
 
@@ -180,5 +195,25 @@ impl CreateTokenDataIdStruct {
         let trunc_addr = &split_addr[3..11].join("");
 
         format!("{}-{}", name, trunc_addr)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DepositEvent {
+    pub id: DepositTokenDataIdStruct,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DepositTokenDataIdStruct {
+    pub token_data_id: CreateTokenDataIdStruct,
+}
+
+impl DepositEvent {
+    pub fn get_collection_id(&self) -> String {
+        self.id.token_data_id.get_collection_id()
+    }
+
+    pub fn get_token_id(&self) -> String {
+        self.id.token_data_id.name.replace(" ", "%20")
     }
 }
