@@ -158,6 +158,7 @@ pub struct MintEvent {
     #[serde(default)]
     pub collection: String,
     pub token: String,
+    pub previous_owner: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -145,6 +145,7 @@ impl EventRemapper {
             }
         }
 
+        let sender = self.get_sender(Arc::new(txn.clone()));
         let events = self.get_events(Arc::new(txn))?;
 
         for event in events.iter() {
@@ -201,6 +202,38 @@ impl EventRemapper {
                     nft_data.insert(token_id, nft);
                     action_data.insert(action_key, action);
                 },
+                "0x4::collection::Burn" => {
+                    let burn = serde_json::from_value::<MintEvent>(event.data.clone())?;
+                    let collection_id = standardize_address(&burn.collection);
+                    let collection = collection_data
+                        .get(&collection_id)
+                        .cloned()
+                        .unwrap_or(Collection::new(&collection_id, None, None, None));
+
+                    let token_id = standardize_address(&burn.token);
+                    let mut nft = nft_data.get(&token_id).cloned().unwrap_or(Nft::new(
+                        &collection_id,
+                        &token_id,
+                        None,
+                    ));
+
+                    nft.burned = Some(false);
+
+                    let mut action = Action::new_from_mint_event(
+                        event,
+                        &transaction_id,
+                        &collection_id,
+                        &token_id,
+                    );
+
+                    action.sender = Some(sender.clone());
+
+                    let action_key = format!("{}::burn", token_id.clone());
+
+                    collection_data.insert(collection_id, collection);
+                    nft_data.insert(token_id, nft);
+                    action_data.insert(action_key, action);
+                },
                 // Example: 0x30b4634d13b4f95227e3eb398c2a5d15ecff4d1732a93e89a4febc72d104a3e4
                 "0x4::collection::MintEvent" => {
                     let collection_id = standardize_address(&event.account_address);
@@ -215,6 +248,30 @@ impl EventRemapper {
                     );
 
                     let action_key = format!("{}::mint", token_id);
+                    action_data.insert(action_key, action);
+                },
+                // Example: 0x44e41340ac34ad247467febd3301e0bace3f140a029afab63281e6025d55da72
+                "0x4::collection::BurnEvent" => {
+                    let collection_id = standardize_address(&event.account_address);
+                    let burn_event = serde_json::from_value::<MintEvent>(event.data.clone())?;
+                    let token_id = standardize_address(&burn_event.token);
+
+                    if let Some(mut nft) = nft_data.get(&token_id).cloned() {
+                        nft.burned = Some(true);
+                        nft.owner = None;
+                        nft_data.insert(token_id.clone(), nft);
+                    }
+
+                    let mut action = Action::new_from_burn_event(
+                        event,
+                        &transaction_id,
+                        &collection_id,
+                        &token_id,
+                    );
+
+                    action.sender = Some(sender.clone());
+
+                    let action_key = format!("{}::burn", token_id);
                     action_data.insert(action_key, action);
                 },
                 // Example: 0xded17be0c08ff93b32339c27999ce2603155a76f8ad21ad1969a6072b0b21700
@@ -238,6 +295,35 @@ impl EventRemapper {
                     );
 
                     let action_key = format!("{}::mint", token_id);
+                    action_data.insert(action_key, action);
+                    collection_data.insert(collection_id, collection);
+                    nft_data.insert(token_id, nft);
+                },
+                // Example: 0x6c87ec5a0dafa2cfa94ce6935dfdd6a20232f75b9e99c918d7d83b485c1b686c
+                "0x3::token::BurnTokenEvent" => {
+                    let sender = standardize_address(&event.account_address);
+                    let burn_token_event =
+                        serde_json::from_value::<MintTokenEvent>(event.data.clone())?;
+
+                    let collection_id = burn_token_event.get_collection_id();
+                    let token_id = burn_token_event.get_token_id();
+                    let name = burn_token_event.id.name.as_str();
+
+                    let mut nft = Nft::new(&collection_id, &token_id, None);
+                    let collection =
+                        Collection::new(&collection_id, Some(name.to_string()), None, None);
+
+                    let action_key = format!("{}::burn", &token_id);
+                    let mut action = Action::new_from_burn_token_event(
+                        event,
+                        &transaction_id,
+                        &collection_id,
+                        &token_id,
+                    );
+
+                    action.sender = Some(sender);
+                    nft.burned = Some(true);
+
                     action_data.insert(action_key, action);
                     collection_data.insert(collection_id, collection);
                     nft_data.insert(token_id, nft);
@@ -873,6 +959,20 @@ impl EventRemapper {
             nfts,
             actions,
         ))
+    }
+
+    fn get_sender(&self, transaction: Arc<Transaction>) -> String {
+        if let Some(txn_data) = transaction.txn_data.as_ref() {
+            match txn_data {
+                TxnData::User(tx_inner) => tx_inner
+                    .request
+                    .clone()
+                    .map_or(String::new(), |inner| inner.sender),
+                _ => String::new(),
+            }
+        } else {
+            String::new()
+        }
     }
 
     fn get_events(&self, transaction: Arc<Transaction>) -> Result<Vec<EventModel>> {

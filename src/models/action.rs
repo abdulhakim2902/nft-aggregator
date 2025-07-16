@@ -103,4 +103,61 @@ impl Action {
             block_height: Some(event.transaction_block_height),
         }
     }
+
+    pub fn new_from_burn_event(
+        event: &EventModel,
+        transaction_id: &str,
+        collection_id: &str,
+        token_id: &str,
+    ) -> Self {
+        let collection_id = standardize_address(collection_id);
+        let collection_uuid = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
+
+        let token_id = standardize_address(token_id);
+        let token_uuid = Uuid::new_v5(
+            &Uuid::NAMESPACE_DNS,
+            format!("{}::{}", collection_id, token_id).as_bytes(),
+        );
+
+        Self {
+            id: None,
+            tx_type: Some("burn".to_string()),
+            tx_id: Some(transaction_id.to_string()),
+            tx_index: Some(event.get_tx_index()),
+            price: None,
+            sender: None,
+            receiver: None,
+            nft_id: Some(token_uuid),
+            collection_id: Some(collection_uuid),
+            block_time: Some(event.block_timestamp),
+            block_height: Some(event.transaction_block_height),
+        }
+    }
+
+    pub fn new_from_burn_token_event(
+        event: &EventModel,
+        transaction_id: &str,
+        collection_id: &str,
+        token_id: &str,
+    ) -> Self {
+        let collection_uuid = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
+        let token_uuid = Uuid::new_v5(
+            &Uuid::NAMESPACE_DNS,
+            format!("{}::{}", collection_id, token_id).as_bytes(),
+        );
+
+        Self {
+            id: None,
+            tx_type: Some("burn".to_string()),
+            tx_id: Some(transaction_id.to_string()),
+            tx_index: Some(event.get_tx_index()),
+            price: None,
+            sender: None,
+            receiver: None,
+            nft_id: Some(token_uuid),
+            collection_id: Some(collection_uuid),
+            block_time: Some(event.block_timestamp),
+            block_height: Some(event.transaction_block_height),
+        }
+    }
 }

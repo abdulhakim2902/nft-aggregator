@@ -354,7 +354,12 @@ pub fn insert_nfts(
         .values(items_to_insert)
         .on_conflict(id)
         .do_update()
-        .set((name.eq(excluded(name)), media_url.eq(excluded(media_url))))
+        .set((
+            name.eq(excluded(name)),
+            media_url.eq(excluded(media_url)),
+            burned.eq(excluded(burned)),
+            owner.eq(excluded(owner)),
+        ))
 }
 
 pub fn insert_actions(
