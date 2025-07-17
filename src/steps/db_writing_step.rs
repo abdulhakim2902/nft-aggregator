@@ -381,7 +381,14 @@ pub fn insert_collections(
         .values(items_to_insert)
         .on_conflict(id)
         .do_update()
-        .set(supply.eq(excluded(supply)))
+        .set((
+            slug.eq(excluded(slug)),
+            supply.eq(excluded(supply)),
+            title.eq(excluded(title)),
+            description.eq(excluded(description)),
+            cover_url.eq(excluded(cover_url)),
+            contract_id.eq(excluded(contract_id)),
+        ))
 }
 
 pub fn insert_nfts(
@@ -394,10 +401,13 @@ pub fn insert_nfts(
         .on_conflict(id)
         .do_update()
         .set((
-            name.eq(excluded(name)),
             media_url.eq(excluded(media_url)),
-            burned.eq(excluded(burned)),
+            name.eq(excluded(name)),
             owner.eq(excluded(owner)),
+            token_id.eq(excluded(token_id)),
+            collection_id.eq(excluded(collection_id)),
+            contract_id.eq(excluded(contract_id)),
+            burned.eq(excluded(burned)),
         ))
 }
 
