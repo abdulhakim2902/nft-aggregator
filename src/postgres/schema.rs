@@ -51,6 +51,14 @@ diesel::table! {
 }
 
 diesel::table! {
+    commissions (id) {
+        id -> Uuid,
+        royalty -> Nullable<Numeric>,
+        contract_id -> Uuid,
+    }
+}
+
+diesel::table! {
     contracts (id) {
         id -> Uuid,
         #[max_length = 128]
@@ -195,6 +203,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     actions,
     backfill_processor_status,
     collections,
+    commissions,
     contracts,
     current_nft_marketplace_collection_offers,
     current_nft_marketplace_listings,

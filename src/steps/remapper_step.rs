@@ -4,6 +4,7 @@ use crate::{
     models::{
         action::Action,
         collection::Collection,
+        commission::Commission,
         contract::Contract,
         nft::Nft,
         nft_models::{
@@ -60,6 +61,7 @@ impl Processable for ProcessStep {
         Vec<Collection>,
         Vec<Nft>,
         Vec<Action>,
+        Vec<Commission>,
         HashMap<String, HashMap<String, String>>,
     );
     type RunType = AsyncRunType;
@@ -78,6 +80,7 @@ impl Processable for ProcessStep {
                 Vec<Collection>,
                 Vec<Nft>,
                 Vec<Action>,
+                Vec<Commission>,
                 HashMap<String, HashMap<String, String>>,
             )>,
         >,
@@ -98,6 +101,7 @@ impl Processable for ProcessStep {
                     collections,
                     nfts,
                     actions,
+                    commissions,
                 ) = event_remapper.remap_events(transaction.clone())?;
 
                 let resource_updates = resource_remapper.remap_resources(transaction.clone())?;
@@ -112,6 +116,7 @@ impl Processable for ProcessStep {
                     collections,
                     nfts,
                     actions,
+                    commissions,
                 ))
             })
             .collect::<anyhow::Result<Vec<_>>>()
@@ -128,8 +133,10 @@ impl Processable for ProcessStep {
             mut all_collections,
             mut all_nfts,
             mut all_actions,
+            mut all_commissions,
             mut all_resource_updates,
         ) = (
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -151,6 +158,7 @@ impl Processable for ProcessStep {
             collections,
             nfts,
             actions,
+            commissions,
         ) in results
         {
             all_activities.extend(activities);
@@ -161,6 +169,7 @@ impl Processable for ProcessStep {
             all_collections.extend(collections);
             all_nfts.extend(nfts);
             all_actions.extend(actions);
+            all_commissions.extend(commissions);
 
             // Merge resource_updates by key
             resource_updates.into_iter().for_each(|(key, value_map)| {
@@ -190,6 +199,7 @@ impl Processable for ProcessStep {
                 all_collections,
                 all_nfts,
                 all_actions,
+                all_commissions,
                 all_resource_updates,
             ),
             metadata: transactions.metadata,

@@ -3,6 +3,7 @@ use crate::{
     models::{
         action::Action,
         collection::Collection,
+        commission::Commission,
         contract::Contract,
         nft::Nft,
         nft_models::{
@@ -102,6 +103,7 @@ impl Processable for NFTReductionStep {
         Vec<Collection>,
         Vec<Nft>,
         Vec<Action>,
+        Vec<Commission>,
         HashMap<String, HashMap<String, String>>,
     );
     type Output = (
@@ -113,6 +115,7 @@ impl Processable for NFTReductionStep {
         Vec<Collection>,
         Vec<Nft>,
         Vec<Action>,
+        Vec<Commission>,
     );
     type RunType = AsyncRunType;
 
@@ -129,6 +132,7 @@ impl Processable for NFTReductionStep {
             collections,
             nfts,
             actions,
+            commissions,
             resource_updates,
         ) = transactions.data;
 
@@ -198,6 +202,7 @@ impl Processable for NFTReductionStep {
                 collections,
                 nfts,
                 actions,
+                commissions,
             ),
             metadata: transactions.metadata,
         }))

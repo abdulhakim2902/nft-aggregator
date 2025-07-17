@@ -1,5 +1,6 @@
 pub mod action;
 pub mod collection;
+pub mod commission;
 pub mod contract;
 pub mod events;
 pub mod nft;

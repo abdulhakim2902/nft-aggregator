@@ -51,6 +51,10 @@ impl CreateTokenDataEventData {
     pub fn get_creator(&self) -> String {
         self.id.get_creator()
     }
+
+    pub fn get_royalty(&self) -> BigDecimal {
+        &self.royalty_points_numerator / &self.royalty_points_denominator * 100
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

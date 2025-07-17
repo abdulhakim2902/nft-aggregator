@@ -5,6 +5,7 @@ use crate::{
     models::{
         action::Action,
         collection::Collection,
+        commission::Commission,
         contract::Contract,
         nft::Nft,
         nft_models::{
@@ -84,10 +85,12 @@ impl EventRemapper {
         Vec<Collection>,
         Vec<Nft>,
         Vec<Action>,
+        Vec<Commission>,
     )> {
         let transaction_info = txn.info.as_ref();
         if transaction_info.is_none() {
             return Ok((
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
@@ -108,6 +111,7 @@ impl EventRemapper {
         let mut nft_data: HashMap<String, Nft> = HashMap::new();
         let mut action_data: HashMap<String, Action> = HashMap::new();
         let mut contract_data: HashMap<String, Contract> = HashMap::new();
+        let mut commission_data: HashMap<String, Commission> = HashMap::new();
 
         let transaction_info = transaction_info.unwrap();
         let transaction_id = format!("0x{}", hex::encode(transaction_info.hash.clone()));
@@ -138,11 +142,13 @@ impl EventRemapper {
                             .set_nft_name_from_write_resource(&resource)
                             .set_nft_info_from_write_resource(&resource);
 
-                        let collection_id = collection.slug.clone().unwrap();
                         nft_data.insert(address.clone(), nft);
-                        if collection_data.get(&collection_id).is_none() {
-                            collection_data.insert(collection_id, collection);
-                        };
+
+                        if let Some(collection_key) = &collection.slug {
+                            if collection_data.get(collection_key).is_none() {
+                                collection_data.insert(collection_key.to_string(), collection);
+                            }
+                        }
                     }
                 },
                 _ => {},
@@ -170,14 +176,17 @@ impl EventRemapper {
                     let contract_key = event_data.data.get_collection();
                     let collection_key = event_data.data.get_collection();
                     let nft_key = event_data.data.get_token();
+                    let commission_key = event_data.data.get_collection();
 
                     let contract = event_data.clone().into();
                     let collection = event_data.clone().into();
                     let nft = event_data.clone().into();
+                    let commission = event_data.clone().into();
 
                     contract_data.insert(contract_key, contract);
                     collection_data.insert(collection_key, collection);
                     nft_data.insert(nft_key, nft);
+                    commission_data.insert(commission_key, commission);
                 },
                 // Example: 0x621f3e938779e93e08254327e4dd71783cf3ce6136c6d03e2fe9c6d7816a57f1
                 AptosEvent::Mint(event_data) => {
@@ -200,6 +209,7 @@ impl EventRemapper {
 
                     let mut action: Action = event_data.clone().into();
                     action.tx_id = Some(transaction_id.clone());
+                    action.tx_index = Some(event.get_tx_index());
                     action.block_time = Some(event.block_timestamp);
                     action.block_height = Some(event.transaction_block_height);
 
@@ -231,6 +241,7 @@ impl EventRemapper {
                     let mut action: Action = event_data.clone().into();
                     action.sender = Some(sender.clone());
                     action.tx_id = Some(transaction_id.clone());
+                    action.tx_index = Some(event.get_tx_index());
                     action.block_time = Some(event.block_timestamp);
                     action.block_height = Some(event.transaction_block_height);
 
@@ -260,6 +271,7 @@ impl EventRemapper {
 
                     let mut action: Action = event_data.clone().into();
                     action.tx_id = Some(transaction_id.clone());
+                    action.tx_index = Some(event.get_tx_index());
                     action.block_time = Some(event.block_timestamp);
                     action.block_height = Some(event.transaction_block_height);
 
@@ -292,6 +304,7 @@ impl EventRemapper {
                     let mut action: Action = event_data.clone().into();
                     action.sender = Some(sender.clone());
                     action.tx_id = Some(transaction_id.clone());
+                    action.tx_index = Some(event.get_tx_index());
                     action.block_time = Some(event.block_timestamp);
                     action.block_height = Some(event.transaction_block_height);
 
@@ -321,6 +334,7 @@ impl EventRemapper {
 
                     let mut action: Action = event_data.clone().into();
                     action.tx_id = Some(transaction_id.clone());
+                    action.tx_index = Some(event.get_tx_index());
                     action.block_time = Some(event.block_timestamp);
                     action.block_height = Some(event.transaction_block_height);
 
@@ -353,6 +367,7 @@ impl EventRemapper {
                     let mut action: Action = event_data.clone().into();
                     action.sender = Some(sender.clone());
                     action.tx_id = Some(transaction_id.clone());
+                    action.tx_index = Some(event.get_tx_index());
                     action.block_time = Some(event.block_timestamp);
                     action.block_height = Some(event.transaction_block_height);
 
@@ -386,6 +401,7 @@ impl EventRemapper {
                             let mut action: Action = event_data.clone().into();
                             action.contract_id = nft.contract_id.clone();
                             action.tx_id = Some(transaction_id.clone());
+                            action.tx_index = Some(event.get_tx_index());
                             action.block_time = Some(event.block_timestamp);
                             action.block_height = Some(event.transaction_block_height);
 
@@ -399,9 +415,6 @@ impl EventRemapper {
                     let mint_key = format!("{}::mint", event_data.data.get_object());
                     if let Some(mut action) = action_data.get(&mint_key).cloned() {
                         action.receiver = Some(event_data.data.get_to());
-                        action.tx_id = Some(transaction_id.clone());
-                        action.block_time = Some(event.block_timestamp);
-                        action.block_height = Some(event.transaction_block_height);
 
                         action_data.insert(mint_key, action);
                     }
@@ -985,6 +998,7 @@ impl EventRemapper {
         let collections = collection_data.into_values().collect::<Vec<Collection>>();
         let nfts = nft_data.into_values().collect::<Vec<Nft>>();
         let actions = action_data.into_values().collect::<Vec<Action>>();
+        let commissions = commission_data.into_values().collect::<Vec<Commission>>();
 
         Ok((
             activities,
@@ -995,6 +1009,7 @@ impl EventRemapper {
             collections,
             nfts,
             actions,
+            commissions,
         ))
     }
 
@@ -1288,6 +1303,7 @@ mod tests {
             _collections,
             _nfts,
             _actions,
+            _commissions,
         ) = remapper.remap_events(transaction)?;
 
         // Verify results
@@ -1408,6 +1424,7 @@ mod tests {
             _collection_data,
             _nft_data,
             _actions,
+            _commissions,
         ) = remapper.remap_events(transaction)?;
 
         // Verify results
@@ -1530,6 +1547,7 @@ mod tests {
             _collections,
             _nfts,
             _actions,
+            _commissions,
         ) = remapper.remap_events(transaction)?;
 
         // Verify results
@@ -1645,6 +1663,7 @@ mod tests {
             _collectiona,
             _nfts,
             _actions,
+            _commissions,
         ) = remapper.remap_events(transaction)?;
 
         // Verify results
@@ -1788,6 +1807,7 @@ mod tests {
             _collections,
             _nfts,
             _actions,
+            _commissions,
         ) = remapper.remap_events(transaction)?;
 
         // Verify results

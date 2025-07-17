@@ -8,6 +8,7 @@ pub mod transfer_event;
 use crate::models::{
     action::Action,
     collection::Collection,
+    commission::Commission,
     contract::Contract,
     events::{
         burn_event::{BurnData, BurnEventData, BurnTokenEventData},
@@ -89,6 +90,16 @@ impl From<EventData<CreateTokenDataEventData>> for Nft {
             name: Some(value.data.name),
             owner: None,
             burned: None,
+        }
+    }
+}
+
+impl From<EventData<CreateTokenDataEventData>> for Commission {
+    fn from(value: EventData<CreateTokenDataEventData>) -> Self {
+        Self {
+            id: None,
+            contract_id: Some(value.data.get_contract_id()),
+            royalty: Some(value.data.get_royalty()),
         }
     }
 }
