@@ -2,6 +2,7 @@ use crate::{
     models::{
         action::Action,
         collection::Collection,
+        commission::Commission,
         contract::Contract,
         nft::Nft,
         nft_models::{
@@ -47,6 +48,7 @@ impl Processable for DBWritingStep {
         Vec<Collection>,
         Vec<Nft>,
         Vec<Action>,
+        Vec<Commission>,
     );
     type Output = ();
     type RunType = AsyncRunType;
@@ -62,6 +64,7 @@ impl Processable for DBWritingStep {
             Vec<Collection>,
             Vec<Nft>,
             Vec<Action>,
+            Vec<Commission>,
         )>,
     ) -> Result<Option<TransactionContext<()>>, ProcessorError> {
         let (
@@ -73,6 +76,7 @@ impl Processable for DBWritingStep {
             collections,
             nfts,
             actions,
+            commissions,
         ) = input.data;
 
         let mut deduped_activities: Vec<NftMarketplaceActivity> = activities
@@ -151,6 +155,7 @@ impl Processable for DBWritingStep {
 
         let deduped_collections: Vec<Collection> = collections
             .into_iter()
+            .filter(|collection| collection.id.is_some())
             .map(|collection| (collection.id.clone(), collection))
             .collect::<HashMap<_, _>>()
             .into_values()
@@ -167,6 +172,13 @@ impl Processable for DBWritingStep {
         let deduped_actions: Vec<Action> = actions
             .into_iter()
             .map(|action| (action.id.clone(), action))
+            .collect::<HashMap<_, _>>()
+            .into_values()
+            .collect();
+
+        let deduped_commissions: Vec<Commission> = commissions
+            .into_iter()
+            .map(|commission| (commission.id.clone(), commission))
             .collect::<HashMap<_, _>>()
             .into_values()
             .collect();
@@ -214,6 +226,13 @@ impl Processable for DBWritingStep {
             200,
         );
 
+        let commission_result = execute_in_chunks(
+            self.db_pool.clone(),
+            insert_commissions,
+            &deduped_commissions,
+            200,
+        );
+
         let action_result =
             execute_in_chunks(self.db_pool.clone(), insert_actions, &deduped_actions, 200);
 
@@ -228,6 +247,7 @@ impl Processable for DBWritingStep {
             collection_result,
             nft_result,
             action_result,
+            commission_result,
         ) = tokio::join!(
             activities_result,
             listings_result,
@@ -237,6 +257,7 @@ impl Processable for DBWritingStep {
             collection_result,
             nft_result,
             action_result,
+            commission_result,
         );
 
         for result in [
@@ -248,6 +269,7 @@ impl Processable for DBWritingStep {
             collection_result,
             nft_result,
             action_result,
+            commission_result,
         ] {
             match result {
                 Ok(_) => (),
@@ -419,5 +441,16 @@ pub fn insert_actions(
     diesel::insert_into(schema::actions::table)
         .values(items_to_insert)
         .on_conflict(id)
+        .do_nothing()
+}
+
+pub fn insert_commissions(
+    items_to_insert: Vec<Commission>,
+) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
+    use crate::schema::commissions::dsl::*;
+
+    diesel::insert_into(schema::commissions::table)
+        .values(items_to_insert)
+        .on_conflict(contract_id)
         .do_nothing()
 }

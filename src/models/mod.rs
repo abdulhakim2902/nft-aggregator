@@ -5,17 +5,27 @@ pub mod contract;
 pub mod events;
 pub mod nft;
 pub mod nft_models;
+pub mod resources;
 
 use crate::{
     config::marketplace_config::EventType,
-    models::events::{
-        burn_event::{BurnData, BurnEventData, BurnTokenEventData},
-        collection_event::CreateCollectionEventData,
-        deposit_event::DepositEventData,
-        mint_event::{MintData, MintEventData, MintTokenEventData},
-        token_event::CreateTokenDataEventData,
-        transfer_event::TransferEventData,
-        EventData,
+    models::{
+        events::{
+            burn_event::{BurnData, BurnEventData, BurnTokenEventData},
+            collection_event::CreateCollectionEventData,
+            deposit_event::DepositEventData,
+            mint_event::{MintData, MintEventData, MintTokenEventData},
+            token_event::CreateTokenDataEventData,
+            transfer_event::TransferEventData,
+            EventData,
+        },
+        resources::{
+            collection::Collection,
+            royalty::Royalty,
+            supply::{ConcurrentSupply, FixedSupply, UnlimitedSupply},
+            token::{Token, TokenIdentifiers},
+            ResourceData,
+        },
     },
 };
 use anyhow::{Context, Result};
@@ -36,6 +46,17 @@ pub enum AptosEvent {
     BurnTokenEvent(EventData<BurnTokenEventData>),
     TransferEvent(EventData<TransferEventData>),
     DepositEvent(EventData<DepositEventData>),
+    Unknown,
+}
+
+pub enum AptosResource {
+    Collection(ResourceData<Collection>),
+    ConcurrentSupply(ResourceData<ConcurrentSupply>),
+    FixedSupply(ResourceData<FixedSupply>),
+    UnlimitedSupply(ResourceData<UnlimitedSupply>),
+    Royalty(ResourceData<Royalty>),
+    Token(ResourceData<Token>),
+    TokenIdentifiers(ResourceData<TokenIdentifiers>),
     Unknown,
 }
 

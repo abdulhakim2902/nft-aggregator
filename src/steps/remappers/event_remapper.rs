@@ -13,7 +13,8 @@ use crate::{
             CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
             NftMarketplaceActivity,
         },
-        AptosEvent, EventModel,
+        resources::parse_resource_data,
+        AptosEvent, AptosResource, EventModel,
     },
     steps::{
         remappers::{SecondaryModel, TableType},
@@ -122,33 +123,64 @@ impl EventRemapper {
             match wsc.change.as_ref().unwrap() {
                 Change::WriteResource(resource) => {
                     let address = standardize_address(&resource.address);
-                    if resource.type_str.starts_with("0x4::collection") {
-                        let collection = collection_data
-                            .get(&address)
-                            .cloned()
-                            .unwrap_or(Collection::new_from_resource(&resource))
-                            .set_collection_info_from_write_resource(&resource)
-                            .set_supply_from_write_resource(&resource);
+                    match parse_resource_data(resource) {
+                        AptosResource::Collection(data) => {
+                            collection_data.insert(address.clone(), data.into());
+                        },
+                        AptosResource::ConcurrentSupply(data) => {
+                            let supply = data.data.get_current_supply();
+                            let collection = collection_data
+                                .get(&address)
+                                .cloned()
+                                .unwrap_or(data.into())
+                                .set_supply(supply);
+                            collection_data.insert(address.clone(), collection);
+                        },
+                        AptosResource::FixedSupply(data) => {
+                            let supply = data.data.get_current_supply();
+                            let collection = collection_data
+                                .get(&address)
+                                .cloned()
+                                .unwrap_or(data.into())
+                                .set_supply(supply);
+                            collection_data.insert(address.clone(), collection);
+                        },
+                        AptosResource::UnlimitedSupply(data) => {
+                            let supply = data.data.get_current_supply();
+                            let collection = collection_data
+                                .get(&address)
+                                .cloned()
+                                .unwrap_or(data.into())
+                                .set_supply(supply);
+                            collection_data.insert(address.clone(), collection);
+                        },
+                        AptosResource::Token(data) => {
+                            let collection_key = data.data.get_collection();
+                            let token_key = address.clone();
 
-                        collection_data.insert(address.clone(), collection);
-                    }
+                            let collection = collection_data
+                                .get(collection_key.as_str())
+                                .cloned()
+                                .unwrap_or(data.clone().into());
+                            let nft = data.clone().into();
 
-                    if resource.type_str.starts_with("0x4::token") {
-                        let collection = Collection::new_from_token_resource(&resource);
-                        let nft = nft_data
-                            .get(&address)
-                            .cloned()
-                            .unwrap_or(Nft::new_from_resource(&resource))
-                            .set_nft_name_from_write_resource(&resource)
-                            .set_nft_info_from_write_resource(&resource);
+                            collection_data.insert(collection_key, collection);
+                            nft_data.insert(token_key, nft);
+                        },
+                        AptosResource::TokenIdentifiers(data) => {
+                            let nft_name = data.data.get_name();
+                            let nft = nft_data
+                                .get(&address)
+                                .cloned()
+                                .unwrap_or(data.into())
+                                .set_name(&nft_name);
 
-                        nft_data.insert(address.clone(), nft);
-
-                        if let Some(collection_key) = &collection.slug {
-                            if collection_data.get(collection_key).is_none() {
-                                collection_data.insert(collection_key.to_string(), collection);
-                            }
-                        }
+                            nft_data.insert(address.clone(), nft);
+                        },
+                        AptosResource::Royalty(data) => {
+                            commission_data.insert(address.clone(), data.into());
+                        },
+                        AptosResource::Unknown => {},
                     }
                 },
                 _ => {},
