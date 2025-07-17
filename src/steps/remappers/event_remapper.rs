@@ -150,6 +150,13 @@ impl EventRemapper {
 
         for event in events.iter() {
             match event.parse_event_data() {
+                // Example: 0xda94f5db94c7dac04ea364069583df27231d3bdab9a21dfbab367fe0f7ecb6d7
+                AptosEvent::CreateCollectionEvent(event_data) => {
+                    let collection_key = event_data.data.get_collection();
+                    let collection = event_data.into();
+
+                    collection_data.insert(collection_key, collection);
+                },
                 // Example: 0xded17be0c08ff93b32339c27999ce2603155a76f8ad21ad1969a6072b0b21700
                 AptosEvent::CreateTokenDataEvent(event_data) => {
                     let collection_key = event_data.data.get_collection();

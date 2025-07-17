@@ -1,4 +1,5 @@
 pub mod burn_event;
+pub mod collection_event;
 pub mod deposit_event;
 pub mod mint_event;
 pub mod token_event;
@@ -9,6 +10,7 @@ use crate::models::{
     collection::Collection,
     events::{
         burn_event::{BurnData, BurnEventData, BurnTokenEventData},
+        collection_event::CreateCollectionEventData,
         mint_event::{MintData, MintEventData, MintTokenEventData},
         token_event::CreateTokenDataEventData,
         transfer_event::TransferEventData,
@@ -25,15 +27,28 @@ pub struct EventData<T: Clone> {
     pub data: T,
 }
 
+impl From<EventData<CreateCollectionEventData>> for Collection {
+    fn from(value: EventData<CreateCollectionEventData>) -> Self {
+        Self {
+            id: Some(value.data.get_collection_id()),
+            slug: Some(value.data.get_collection()),
+            supply: None,
+            title: Some(value.data.collection_name),
+            description: Some(value.data.description),
+            cover_url: Some(value.data.uri),
+        }
+    }
+}
+
 impl From<EventData<CreateTokenDataEventData>> for Collection {
     fn from(value: EventData<CreateTokenDataEventData>) -> Self {
         Self {
             id: Some(value.data.get_collection_id()),
             slug: Some(value.data.get_collection()),
             supply: None,
-            title: Some(value.data.name),
-            description: Some(value.data.description),
-            cover_url: Some(value.data.uri),
+            title: None,
+            description: None,
+            cover_url: None,
         }
     }
 }
@@ -45,7 +60,7 @@ impl From<EventData<CreateTokenDataEventData>> for Nft {
             token_id: Some(value.data.get_token()),
             collection_id: Some(value.data.get_collection_id()),
             media_url: Some(value.data.uri),
-            name: None,
+            name: Some(value.data.name),
             owner: None,
             burned: None,
         }

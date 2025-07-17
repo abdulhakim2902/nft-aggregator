@@ -1,5 +1,6 @@
 pub mod action;
 pub mod collection;
+pub mod contract;
 pub mod events;
 pub mod nft;
 pub mod nft_models;
@@ -8,6 +9,7 @@ use crate::{
     config::marketplace_config::EventType,
     models::events::{
         burn_event::{BurnData, BurnEventData, BurnTokenEventData},
+        collection_event::CreateCollectionEventData,
         deposit_event::DepositEventData,
         mint_event::{MintData, MintEventData, MintTokenEventData},
         token_event::CreateTokenDataEventData,
@@ -23,6 +25,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 pub enum AptosEvent {
+    CreateCollectionEvent(EventData<CreateCollectionEventData>),
     CreateTokenDataEvent(EventData<CreateTokenDataEventData>),
     Mint(EventData<MintData>),
     MintEvent(EventData<MintEventData>),
@@ -122,6 +125,15 @@ impl EventModel {
     pub fn parse_event_data(&self) -> AptosEvent {
         let result =
             match self.type_.as_str() {
+                "0x3::token::CreateCollectionEvent" => serde_json::from_value::<
+                    CreateCollectionEventData,
+                >(self.data.clone())
+                .map_or(AptosEvent::Unknown, |e| {
+                    AptosEvent::CreateCollectionEvent(EventData {
+                        account_address: self.account_address.clone(),
+                        data: e,
+                    })
+                }),
                 "0x3::token::CreateTokenDataEvent" => serde_json::from_value::<
                     CreateTokenDataEventData,
                 >(self.data.clone())
