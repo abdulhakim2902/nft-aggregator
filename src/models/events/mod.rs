@@ -8,6 +8,7 @@ pub mod transfer_event;
 use crate::models::{
     action::Action,
     collection::Collection,
+    contract::Contract,
     events::{
         burn_event::{BurnData, BurnEventData, BurnTokenEventData},
         collection_event::CreateCollectionEventData,
@@ -27,6 +28,22 @@ pub struct EventData<T: Clone> {
     pub data: T,
 }
 
+impl From<EventData<CreateCollectionEventData>> for Contract {
+    fn from(value: EventData<CreateCollectionEventData>) -> Self {
+        let collection_name = value.data.collection_name.replace(" ", "%20");
+        let key = format!("{}::{}", value.data.get_creator(), collection_name);
+        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
+
+        Self {
+            id: Some(id),
+            key: Some(key),
+            type_: Some("non_fungible_tokens".to_string()),
+            name: None,
+        }
+    }
+}
+
 impl From<EventData<CreateCollectionEventData>> for Collection {
     fn from(value: EventData<CreateCollectionEventData>) -> Self {
         Self {
@@ -36,6 +53,22 @@ impl From<EventData<CreateCollectionEventData>> for Collection {
             title: Some(value.data.collection_name),
             description: Some(value.data.description),
             cover_url: Some(value.data.uri),
+        }
+    }
+}
+
+impl From<EventData<CreateTokenDataEventData>> for Contract {
+    fn from(value: EventData<CreateTokenDataEventData>) -> Self {
+        let collection_name = value.data.id.collection.replace(" ", "%20");
+        let key = format!("{}::{}", value.data.get_creator(), collection_name);
+        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
+
+        Self {
+            id: Some(id),
+            key: Some(key),
+            type_: Some("non_fungible_tokens".to_string()),
+            name: None,
         }
     }
 }
@@ -63,6 +96,21 @@ impl From<EventData<CreateTokenDataEventData>> for Nft {
             name: Some(value.data.name),
             owner: None,
             burned: None,
+        }
+    }
+}
+
+impl From<EventData<MintData>> for Contract {
+    fn from(value: EventData<MintData>) -> Self {
+        let key = value.data.get_collection();
+        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
+
+        Self {
+            id: Some(id),
+            key: Some(key),
+            type_: Some("non_fungible_tokens".to_string()),
+            name: None,
         }
     }
 }
@@ -112,6 +160,21 @@ impl From<EventData<MintData>> for Action {
     }
 }
 
+impl From<EventData<BurnData>> for Contract {
+    fn from(value: EventData<BurnData>) -> Self {
+        let key = value.data.get_collection();
+        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
+
+        Self {
+            id: Some(id),
+            key: Some(key),
+            type_: Some("non_fungible_tokens".to_string()),
+            name: None,
+        }
+    }
+}
+
 impl From<EventData<BurnData>> for Collection {
     fn from(value: EventData<BurnData>) -> Self {
         Self {
@@ -153,6 +216,21 @@ impl From<EventData<BurnData>> for Action {
             collection_id: Some(value.data.get_collection_id()),
             block_time: None,
             block_height: None,
+        }
+    }
+}
+
+impl From<EventData<MintEventData>> for Contract {
+    fn from(value: EventData<MintEventData>) -> Self {
+        let key = standardize_address(&value.account_address);
+        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
+
+        Self {
+            id: Some(id),
+            key: Some(key),
+            type_: Some("non_fungible_tokens".to_string()),
+            name: None,
         }
     }
 }
@@ -211,6 +289,21 @@ impl From<EventData<MintEventData>> for Action {
     }
 }
 
+impl From<EventData<BurnEventData>> for Contract {
+    fn from(value: EventData<BurnEventData>) -> Self {
+        let key = standardize_address(&value.account_address);
+        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
+
+        Self {
+            id: Some(id),
+            key: Some(key),
+            type_: Some("non_fungible_tokens".to_string()),
+            name: None,
+        }
+    }
+}
+
 impl From<EventData<BurnEventData>> for Collection {
     fn from(value: EventData<BurnEventData>) -> Self {
         let collection = standardize_address(&value.account_address);
@@ -265,6 +358,22 @@ impl From<EventData<BurnEventData>> for Action {
     }
 }
 
+impl From<EventData<MintTokenEventData>> for Contract {
+    fn from(value: EventData<MintTokenEventData>) -> Self {
+        let collection_name = value.data.id.collection.replace(" ", "%20");
+        let key = format!("{}::{}", value.data.id.get_creator(), collection_name);
+        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
+
+        Self {
+            id: Some(id),
+            key: Some(key),
+            type_: Some("non_fungible_tokens".to_string()),
+            name: None,
+        }
+    }
+}
+
 impl From<EventData<MintTokenEventData>> for Collection {
     fn from(value: EventData<MintTokenEventData>) -> Self {
         Self {
@@ -306,6 +415,26 @@ impl From<EventData<MintTokenEventData>> for Action {
             collection_id: Some(value.data.get_collection_id()),
             block_time: None,
             block_height: None,
+        }
+    }
+}
+
+impl From<EventData<BurnTokenEventData>> for Contract {
+    fn from(value: EventData<BurnTokenEventData>) -> Self {
+        let collection_name = value.data.id.token_data_id.collection.replace(" ", "%20");
+        let key = format!(
+            "{}::{}",
+            value.data.id.token_data_id.get_creator(),
+            collection_name
+        );
+        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
+        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
+
+        Self {
+            id: Some(id),
+            key: Some(key),
+            type_: Some("non_fungible_tokens".to_string()),
+            name: None,
         }
     }
 }

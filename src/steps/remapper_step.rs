@@ -4,6 +4,7 @@ use crate::{
     models::{
         action::Action,
         collection::Collection,
+        contract::Contract,
         nft::Nft,
         nft_models::{
             CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
@@ -55,6 +56,7 @@ impl Processable for ProcessStep {
         Vec<CurrentNFTMarketplaceListing>,
         Vec<CurrentNFTMarketplaceTokenOffer>,
         Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<Contract>,
         Vec<Collection>,
         Vec<Nft>,
         Vec<Action>,
@@ -72,6 +74,7 @@ impl Processable for ProcessStep {
                 Vec<CurrentNFTMarketplaceListing>,
                 Vec<CurrentNFTMarketplaceTokenOffer>,
                 Vec<CurrentNFTMarketplaceCollectionOffer>,
+                Vec<Contract>,
                 Vec<Collection>,
                 Vec<Nft>,
                 Vec<Action>,
@@ -91,6 +94,7 @@ impl Processable for ProcessStep {
                     listings,
                     token_offers,
                     collection_offers,
+                    contracts,
                     collections,
                     nfts,
                     actions,
@@ -104,6 +108,7 @@ impl Processable for ProcessStep {
                     token_offers,
                     collection_offers,
                     resource_updates,
+                    contracts,
                     collections,
                     nfts,
                     actions,
@@ -119,11 +124,13 @@ impl Processable for ProcessStep {
             mut all_listings,
             mut all_token_offers,
             mut all_collection_offers,
+            mut all_contracts,
             mut all_collections,
             mut all_nfts,
             mut all_actions,
             mut all_resource_updates,
         ) = (
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -140,6 +147,7 @@ impl Processable for ProcessStep {
             token_offers,
             collection_offers,
             resource_updates,
+            contracts,
             collections,
             nfts,
             actions,
@@ -149,6 +157,7 @@ impl Processable for ProcessStep {
             all_listings.extend(listings);
             all_token_offers.extend(token_offers);
             all_collection_offers.extend(collection_offers);
+            all_contracts.extend(contracts);
             all_collections.extend(collections);
             all_nfts.extend(nfts);
             all_actions.extend(actions);
@@ -177,6 +186,7 @@ impl Processable for ProcessStep {
                 all_listings,
                 all_token_offers,
                 all_collection_offers,
+                all_contracts,
                 all_collections,
                 all_nfts,
                 all_actions,

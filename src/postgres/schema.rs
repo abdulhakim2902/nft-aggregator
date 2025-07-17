@@ -49,6 +49,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    contracts (id) {
+        id -> Uuid,
+        #[max_length = 128]
+        key -> Varchar,
+        #[max_length = 30]
+        type_ -> Varchar,
+        #[max_length = 30]
+        name -> Nullable<Varchar>,
+    }
+}
+
+diesel::table! {
     current_nft_marketplace_collection_offers (collection_offer_id, marketplace) {
         #[max_length = 128]
         collection_offer_id -> Varchar,
@@ -180,6 +192,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     actions,
     backfill_processor_status,
     collections,
+    contracts,
     current_nft_marketplace_collection_offers,
     current_nft_marketplace_listings,
     current_nft_marketplace_token_offers,
