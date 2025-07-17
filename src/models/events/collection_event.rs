@@ -18,6 +18,11 @@ impl CreateCollectionEventData {
         standardize_address(&self.creator)
     }
 
+    pub fn get_contract(&self) -> String {
+        let collection_name = self.collection_name.replace(" ", "%20");
+        format!("{}::{}", self.get_creator(), collection_name)
+    }
+
     pub fn get_collection(&self) -> String {
         let collection = self
             .collection_name
@@ -33,6 +38,11 @@ impl CreateCollectionEventData {
         let trunc_addr = &split_addr[3..11].join("");
 
         format!("{}-{}", name, trunc_addr).to_lowercase()
+    }
+
+    pub fn get_contract_id(&self) -> Uuid {
+        let contract_id = format!("{}::{}", self.get_contract(), "non_fungible_tokens");
+        Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes())
     }
 
     /// Generate uuid from collection

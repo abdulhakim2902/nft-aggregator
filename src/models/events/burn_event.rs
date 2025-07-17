@@ -14,6 +14,10 @@ pub struct BurnData {
 }
 
 impl BurnData {
+    pub fn get_contract(&self) -> String {
+        self.get_collection()
+    }
+
     pub fn get_collection(&self) -> String {
         standardize_address(&self.collection)
     }
@@ -24,6 +28,11 @@ impl BurnData {
 
     pub fn get_previous_owner(&self) -> String {
         standardize_address(&self.previous_owner)
+    }
+
+    pub fn get_contract_id(&self) -> Uuid {
+        let contract_id = format!("{}::{}", self.get_contract(), "non_fungible_tokens");
+        Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes())
     }
 
     /// Generate uuid from collection
@@ -51,6 +60,11 @@ impl BurnEventData {
         standardize_address(&self.token)
     }
 
+    pub fn get_contract_id(&self, contract: &str) -> Uuid {
+        let contract_id = format!("{}::{}", contract, "non_fungible_tokens");
+        Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes())
+    }
+
     /// Generate uuid from token
     pub fn get_token_id(&self, collection: &str) -> Uuid {
         let key = format!("{}::{}", collection, self.get_token());
@@ -67,12 +81,22 @@ pub struct BurnTokenEventData {
 }
 
 impl BurnTokenEventData {
+    pub fn get_contract(&self) -> String {
+        let collection = self.id.token_data_id.collection.replace(" ", "%20");
+        format!("{}::{}", self.id.token_data_id.get_creator(), collection)
+    }
+
     pub fn get_collection(&self) -> String {
         self.id.token_data_id.get_collection()
     }
 
     pub fn get_token(&self) -> String {
         self.id.token_data_id.get_token()
+    }
+
+    pub fn get_contract_id(&self) -> Uuid {
+        let contract_id = format!("{}::{}", self.get_contract(), "non_fungible_tokens");
+        Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes())
     }
 
     pub fn get_collection_id(&self) -> Uuid {

@@ -384,6 +384,7 @@ impl EventRemapper {
                         let transfer_key = format!("{}::transfer", nft_key.as_str());
                         if nft.collection_id.is_some() && nft.token_id.is_some() {
                             let mut action: Action = event_data.clone().into();
+                            action.contract_id = nft.contract_id.clone();
                             action.tx_id = Some(transaction_id.clone());
                             action.block_time = Some(event.block_timestamp);
                             action.block_height = Some(event.transaction_block_height);

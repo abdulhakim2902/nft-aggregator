@@ -13,6 +13,6 @@ CREATE TABLE IF NOT EXISTS collections (
   -- Add discord VARCHAR(66),
   description TEXT,
   cover_url VARCHAR(512),
-  -- Add contract id
+  contract_id uuid DEFAULT NULL,
   PRIMARY KEY (id)
 );

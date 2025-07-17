@@ -19,6 +19,7 @@ pub struct Nft {
     pub owner: Option<String>,
     pub token_id: Option<String>,
     pub collection_id: Option<Uuid>,
+    pub contract_id: Option<Uuid>,
     pub burned: Option<bool>,
 }
 
@@ -31,6 +32,7 @@ impl Nft {
             media_url: None,
             name: None,
             owner: None,
+            contract_id: None,
             token_id: Some(token_id.to_string()),
             collection_id: None,
             burned: None,

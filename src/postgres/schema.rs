@@ -13,8 +13,9 @@ diesel::table! {
         #[max_length = 66]
         receiver -> Nullable<Varchar>,
         price -> Nullable<Int8>,
-        nft_id -> Uuid,
-        collection_id -> Uuid,
+        nft_id -> Nullable<Uuid>,
+        contract_id -> Nullable<Uuid>,
+        collection_id -> Nullable<Uuid>,
         block_time -> Timestamptz,
         block_height -> Int8,
     }
@@ -45,6 +46,7 @@ diesel::table! {
         description -> Nullable<Text>,
         #[max_length = 512]
         cover_url -> Nullable<Varchar>,
+        contract_id -> Nullable<Uuid>,
     }
 }
 
@@ -171,6 +173,7 @@ diesel::table! {
         name -> Nullable<Varchar>,
         #[max_length = 66]
         owner -> Nullable<Varchar>,
+        contract_id -> Nullable<Uuid>,
         collection_id -> Nullable<Uuid>,
         #[max_length = 128]
         token_id -> Nullable<Varchar>,

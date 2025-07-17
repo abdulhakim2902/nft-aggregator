@@ -30,14 +30,9 @@ pub struct EventData<T: Clone> {
 
 impl From<EventData<CreateCollectionEventData>> for Contract {
     fn from(value: EventData<CreateCollectionEventData>) -> Self {
-        let collection_name = value.data.collection_name.replace(" ", "%20");
-        let key = format!("{}::{}", value.data.get_creator(), collection_name);
-        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
-
         Self {
-            id: Some(id),
-            key: Some(key),
+            id: Some(value.data.get_contract_id()),
+            key: Some(value.data.get_contract()),
             type_: Some("non_fungible_tokens".to_string()),
             name: None,
         }
@@ -49,6 +44,7 @@ impl From<EventData<CreateCollectionEventData>> for Collection {
         Self {
             id: Some(value.data.get_collection_id()),
             slug: Some(value.data.get_collection()),
+            contract_id: Some(value.data.get_contract_id()),
             supply: None,
             title: Some(value.data.collection_name),
             description: Some(value.data.description),
@@ -59,14 +55,9 @@ impl From<EventData<CreateCollectionEventData>> for Collection {
 
 impl From<EventData<CreateTokenDataEventData>> for Contract {
     fn from(value: EventData<CreateTokenDataEventData>) -> Self {
-        let collection_name = value.data.id.collection.replace(" ", "%20");
-        let key = format!("{}::{}", value.data.get_creator(), collection_name);
-        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
-
         Self {
-            id: Some(id),
-            key: Some(key),
+            id: Some(value.data.get_contract_id()),
+            key: Some(value.data.get_contract()),
             type_: Some("non_fungible_tokens".to_string()),
             name: None,
         }
@@ -77,6 +68,7 @@ impl From<EventData<CreateTokenDataEventData>> for Collection {
     fn from(value: EventData<CreateTokenDataEventData>) -> Self {
         Self {
             id: Some(value.data.get_collection_id()),
+            contract_id: Some(value.data.get_contract_id()),
             slug: Some(value.data.get_collection()),
             supply: None,
             title: None,
@@ -91,6 +83,7 @@ impl From<EventData<CreateTokenDataEventData>> for Nft {
         Self {
             id: Some(value.data.get_token_id()),
             token_id: Some(value.data.get_token()),
+            contract_id: Some(value.data.get_contract_id()),
             collection_id: Some(value.data.get_collection_id()),
             media_url: Some(value.data.uri),
             name: Some(value.data.name),
@@ -102,13 +95,9 @@ impl From<EventData<CreateTokenDataEventData>> for Nft {
 
 impl From<EventData<MintData>> for Contract {
     fn from(value: EventData<MintData>) -> Self {
-        let key = value.data.get_collection();
-        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
-
         Self {
-            id: Some(id),
-            key: Some(key),
+            id: Some(value.data.get_contract_id()),
+            key: Some(value.data.get_contract()),
             type_: Some("non_fungible_tokens".to_string()),
             name: None,
         }
@@ -119,6 +108,7 @@ impl From<EventData<MintData>> for Collection {
     fn from(value: EventData<MintData>) -> Self {
         Self {
             id: Some(value.data.get_collection_id()),
+            contract_id: Some(value.data.get_contract_id()),
             slug: Some(value.data.get_collection()),
             supply: None,
             title: None,
@@ -133,6 +123,7 @@ impl From<EventData<MintData>> for Nft {
         Self {
             id: Some(value.data.get_token_id()),
             token_id: Some(value.data.get_token()),
+            contract_id: Some(value.data.get_contract_id()),
             collection_id: Some(value.data.get_collection_id()),
             media_url: None,
             name: None,
@@ -154,6 +145,7 @@ impl From<EventData<MintData>> for Action {
             receiver: None,
             nft_id: Some(value.data.get_token_id()),
             collection_id: Some(value.data.get_collection_id()),
+            contract_id: Some(value.data.get_contract_id()),
             block_time: None,
             block_height: None,
         }
@@ -162,13 +154,9 @@ impl From<EventData<MintData>> for Action {
 
 impl From<EventData<BurnData>> for Contract {
     fn from(value: EventData<BurnData>) -> Self {
-        let key = value.data.get_collection();
-        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
-
         Self {
-            id: Some(id),
-            key: Some(key),
+            id: Some(value.data.get_contract_id()),
+            key: Some(value.data.get_contract()),
             type_: Some("non_fungible_tokens".to_string()),
             name: None,
         }
@@ -180,6 +168,7 @@ impl From<EventData<BurnData>> for Collection {
         Self {
             id: Some(value.data.get_collection_id()),
             slug: Some(value.data.get_collection()),
+            contract_id: Some(value.data.get_contract_id()),
             supply: None,
             title: None,
             description: None,
@@ -194,6 +183,7 @@ impl From<EventData<BurnData>> for Nft {
             id: Some(value.data.get_token_id()),
             token_id: Some(value.data.get_token()),
             collection_id: Some(value.data.get_collection_id()),
+            contract_id: Some(value.data.get_contract_id()),
             media_url: None,
             name: None,
             owner: None,
@@ -214,6 +204,7 @@ impl From<EventData<BurnData>> for Action {
             receiver: None,
             nft_id: Some(value.data.get_token_id()),
             collection_id: Some(value.data.get_collection_id()),
+            contract_id: Some(value.data.get_contract_id()),
             block_time: None,
             block_height: None,
         }
@@ -223,11 +214,9 @@ impl From<EventData<BurnData>> for Action {
 impl From<EventData<MintEventData>> for Contract {
     fn from(value: EventData<MintEventData>) -> Self {
         let key = standardize_address(&value.account_address);
-        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
 
         Self {
-            id: Some(id),
+            id: Some(value.data.get_contract_id(&key)),
             key: Some(key),
             type_: Some("non_fungible_tokens".to_string()),
             name: None,
@@ -242,6 +231,7 @@ impl From<EventData<MintEventData>> for Collection {
 
         Self {
             id: Some(collection_id),
+            contract_id: Some(value.data.get_contract_id(&collection)),
             slug: Some(collection),
             supply: None,
             title: None,
@@ -258,6 +248,7 @@ impl From<EventData<MintEventData>> for Nft {
 
         Self {
             id: Some(value.data.get_token_id(&collection)),
+            contract_id: Some(value.data.get_contract_id(&collection)),
             token_id: Some(value.data.get_token()),
             collection_id: Some(collection_id),
             media_url: None,
@@ -281,6 +272,7 @@ impl From<EventData<MintEventData>> for Action {
             price: None,
             sender: None,
             receiver: None,
+            contract_id: Some(value.data.get_contract_id(&collection)),
             nft_id: Some(value.data.get_token_id(&collection)),
             collection_id: Some(collection_id),
             block_time: None,
@@ -292,11 +284,9 @@ impl From<EventData<MintEventData>> for Action {
 impl From<EventData<BurnEventData>> for Contract {
     fn from(value: EventData<BurnEventData>) -> Self {
         let key = standardize_address(&value.account_address);
-        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
 
         Self {
-            id: Some(id),
+            id: Some(value.data.get_contract_id(&key)),
             key: Some(key),
             type_: Some("non_fungible_tokens".to_string()),
             name: None,
@@ -311,6 +301,7 @@ impl From<EventData<BurnEventData>> for Collection {
 
         Self {
             id: Some(collection_id),
+            contract_id: Some(value.data.get_contract_id(&collection)),
             slug: Some(collection),
             supply: None,
             title: None,
@@ -327,6 +318,7 @@ impl From<EventData<BurnEventData>> for Nft {
 
         Self {
             id: Some(value.data.get_token_id(&collection)),
+            contract_id: Some(value.data.get_contract_id(&collection)),
             token_id: Some(value.data.get_token()),
             collection_id: Some(collection_id),
             media_url: None,
@@ -350,6 +342,7 @@ impl From<EventData<BurnEventData>> for Action {
             price: None,
             sender: None,
             receiver: None,
+            contract_id: Some(value.data.get_contract_id(&collection)),
             nft_id: Some(value.data.get_token_id(&collection)),
             collection_id: Some(collection_id),
             block_time: None,
@@ -360,14 +353,9 @@ impl From<EventData<BurnEventData>> for Action {
 
 impl From<EventData<MintTokenEventData>> for Contract {
     fn from(value: EventData<MintTokenEventData>) -> Self {
-        let collection_name = value.data.id.collection.replace(" ", "%20");
-        let key = format!("{}::{}", value.data.id.get_creator(), collection_name);
-        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
-
         Self {
-            id: Some(id),
-            key: Some(key),
+            id: Some(value.data.get_contract_id()),
+            key: Some(value.data.get_contract()),
             type_: Some("non_fungible_tokens".to_string()),
             name: None,
         }
@@ -379,6 +367,7 @@ impl From<EventData<MintTokenEventData>> for Collection {
         Self {
             id: Some(value.data.get_collection_id()),
             slug: Some(value.data.get_collection()),
+            contract_id: Some(value.data.get_contract_id()),
             supply: None,
             title: Some(value.data.id.name),
             description: None,
@@ -392,6 +381,7 @@ impl From<EventData<MintTokenEventData>> for Nft {
         Self {
             id: Some(value.data.get_token_id()),
             token_id: Some(value.data.get_token()),
+            contract_id: Some(value.data.get_contract_id()),
             collection_id: Some(value.data.get_collection_id()),
             media_url: None,
             name: None,
@@ -411,6 +401,7 @@ impl From<EventData<MintTokenEventData>> for Action {
             price: None,
             sender: None,
             receiver: None,
+            contract_id: Some(value.data.get_contract_id()),
             nft_id: Some(value.data.get_token_id()),
             collection_id: Some(value.data.get_collection_id()),
             block_time: None,
@@ -421,18 +412,9 @@ impl From<EventData<MintTokenEventData>> for Action {
 
 impl From<EventData<BurnTokenEventData>> for Contract {
     fn from(value: EventData<BurnTokenEventData>) -> Self {
-        let collection_name = value.data.id.token_data_id.collection.replace(" ", "%20");
-        let key = format!(
-            "{}::{}",
-            value.data.id.token_data_id.get_creator(),
-            collection_name
-        );
-        let contract_id = format!("{}::{}", key, "non_fungible_tokens");
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
-
         Self {
-            id: Some(id),
-            key: Some(key),
+            id: Some(value.data.get_contract_id()),
+            key: Some(value.data.get_contract()),
             type_: Some("non_fungible_tokens".to_string()),
             name: None,
         }
@@ -443,6 +425,7 @@ impl From<EventData<BurnTokenEventData>> for Collection {
     fn from(value: EventData<BurnTokenEventData>) -> Self {
         Self {
             id: Some(value.data.get_collection_id()),
+            contract_id: Some(value.data.get_contract_id()),
             slug: Some(value.data.get_collection()),
             supply: None,
             title: Some(value.data.id.token_data_id.name),
@@ -456,6 +439,7 @@ impl From<EventData<BurnTokenEventData>> for Nft {
     fn from(value: EventData<BurnTokenEventData>) -> Self {
         Self {
             id: Some(value.data.get_token_id()),
+            contract_id: Some(value.data.get_contract_id()),
             token_id: Some(value.data.get_token()),
             collection_id: Some(value.data.get_collection_id()),
             media_url: None,
@@ -476,6 +460,7 @@ impl From<EventData<BurnTokenEventData>> for Action {
             price: None,
             sender: None,
             receiver: None,
+            contract_id: Some(value.data.get_contract_id()),
             nft_id: Some(value.data.get_token_id()),
             collection_id: Some(value.data.get_collection_id()),
             block_time: None,
@@ -492,6 +477,7 @@ impl From<EventData<TransferEventData>> for Action {
             tx_id: None,
             tx_index: None,
             price: None,
+            contract_id: None,
             sender: Some(value.data.get_from()),
             receiver: Some(value.data.get_to()),
             nft_id: None,

@@ -24,6 +24,7 @@ pub struct Collection {
     pub title: Option<String>,
     pub description: Option<String>,
     pub cover_url: Option<String>,
+    pub contract_id: Option<Uuid>,
 }
 
 impl Collection {
@@ -36,6 +37,7 @@ impl Collection {
                 return Collection {
                     id: Some(id),
                     slug: Some(collection_id),
+                    contract_id: None,
                     title: None,
                     cover_url: Some(inner.uri),
                     description: Some(inner.description),
@@ -54,6 +56,7 @@ impl Collection {
         Collection {
             id: Some(id),
             slug: Some(slug),
+            contract_id: None,
             supply: None,
             title: None,
             description: None,

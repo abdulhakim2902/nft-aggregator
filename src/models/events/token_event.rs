@@ -22,12 +22,22 @@ impl CreateTokenDataEventData {
         standardize_address(&self.royalty_payee_address)
     }
 
+    pub fn get_contract(&self) -> String {
+        let collection_name = self.id.collection.replace(" ", "%20");
+        format!("{}::{}", self.id.get_creator(), collection_name)
+    }
+
     pub fn get_collection(&self) -> String {
         self.id.get_collection()
     }
 
     pub fn get_token(&self) -> String {
         self.id.get_token()
+    }
+
+    pub fn get_contract_id(&self) -> Uuid {
+        let contract_id = format!("{}::{}", self.get_contract(), "non_fungible_tokens");
+        Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes())
     }
 
     pub fn get_collection_id(&self) -> Uuid {

@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS nfts (
   media_url VARCHAR(512),
   name VARCHAR(128),
   owner VARCHAR(66),
+  contract_id uuid DEFAULT NULL,
   collection_id uuid DEFAULT NULL,
   -- Add nft properties
   -- Add contract uuid
