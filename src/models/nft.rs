@@ -27,7 +27,7 @@ impl Nft {
     pub fn new_from_resource(resource: &WriteResource) -> Self {
         let token_id = standardize_address(&resource.address);
 
-        Nft {
+        let mut nft = Nft {
             id: None,
             media_url: None,
             name: None,
@@ -36,7 +36,17 @@ impl Nft {
             token_id: Some(token_id.to_string()),
             collection_id: None,
             burned: None,
+        };
+
+        if let Some(inner) = serde_json::from_str::<TokenStruct>(resource.data.as_str()).ok() {
+            let collection_id = standardize_address(&inner.collection.inner);
+            let contract_id = format!("{}::{}", collection_id.as_str(), "non_fungible_tokens");
+            let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
+
+            nft.contract_id = Some(id);
         }
+
+        nft
     }
 
     pub fn set_is_burned(mut self, burned: bool) -> Self {

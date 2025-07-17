@@ -29,21 +29,21 @@ pub struct Collection {
 
 impl Collection {
     pub fn new_from_token_resource(resource: &WriteResource) -> Self {
-        if &resource.type_str == "0x4::token::Token" {
-            if let Some(inner) = serde_json::from_str::<TokenStruct>(resource.data.as_str()).ok() {
-                let collection_id = standardize_address(&inner.collection.inner);
-                let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
+        if let Some(inner) = serde_json::from_str::<TokenStruct>(resource.data.as_str()).ok() {
+            let collection_id = standardize_address(&inner.collection.inner);
+            let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
+            let contract_id = format!("{}::{}", collection_id.as_str(), "non_fungible_tokens");
+            let contract_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract_id.as_bytes());
 
-                return Collection {
-                    id: Some(id),
-                    slug: Some(collection_id),
-                    contract_id: None,
-                    title: None,
-                    cover_url: Some(inner.uri),
-                    description: Some(inner.description),
-                    supply: None,
-                };
-            }
+            return Collection {
+                id: Some(id),
+                slug: Some(collection_id),
+                contract_id: Some(contract_id),
+                title: None,
+                cover_url: Some(inner.uri),
+                description: Some(inner.description),
+                supply: None,
+            };
         }
 
         Collection::default()
