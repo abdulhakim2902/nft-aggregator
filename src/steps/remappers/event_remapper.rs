@@ -4,14 +4,14 @@ use crate::{
     },
     models::{
         action::Action,
-        collection::{Collection, CreateTokenDataEvent, DepositEvent, MintEvent, MintTokenEvent},
-        nft::{Nft, TransferEvent},
+        collection::Collection,
+        nft::Nft,
         nft_models::{
             CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
             NftMarketplaceActivity,
         },
-        EventModel,
+        AptosEvent, EventModel,
     },
     steps::{
         remappers::{SecondaryModel, TableType},
@@ -149,237 +149,219 @@ impl EventRemapper {
         let events = self.get_events(Arc::new(txn))?;
 
         for event in events.iter() {
-            match event.type_.as_str() {
+            match event.parse_event_data() {
                 // Example: 0xded17be0c08ff93b32339c27999ce2603155a76f8ad21ad1969a6072b0b21700
-                "0x3::token::CreateTokenDataEvent" => {
-                    let create_token_event =
-                        serde_json::from_value::<CreateTokenDataEvent>(event.data.clone())?;
+                AptosEvent::CreateTokenDataEvent(event_data) => {
+                    let collection_key = event_data.data.get_collection();
+                    let nft_key = event_data.data.get_token();
 
-                    let collection_id = create_token_event.get_collection_id();
-                    let name = create_token_event.id.name.as_str();
-                    let description = create_token_event.description.as_str();
-                    let uri = create_token_event.uri.as_str();
+                    let collection = event_data.clone().into();
+                    let nft = event_data.clone().into();
 
-                    let token_id = create_token_event.get_token_id();
-
-                    let nft = Nft::new(&collection_id, &token_id, Some(uri.to_string()));
-                    let collection = Collection::new(
-                        &collection_id,
-                        Some(name.to_string()),
-                        Some(description.to_string()),
-                        Some(uri.to_string()),
-                    );
-
-                    collection_data.insert(collection_id, collection);
-                    nft_data.insert(token_id, nft);
+                    collection_data.insert(collection_key, collection);
+                    nft_data.insert(nft_key, nft);
                 },
                 // Example: 0x621f3e938779e93e08254327e4dd71783cf3ce6136c6d03e2fe9c6d7816a57f1
-                "0x4::collection::Mint" => {
-                    let mint_event = serde_json::from_value::<MintEvent>(event.data.clone())?;
-                    let collection_id = standardize_address(&mint_event.collection);
+                AptosEvent::Mint(event_data) => {
+                    let collection_key = event_data.data.get_collection();
+                    let nft_key = event_data.data.get_token();
+                    let action_key = format!("{}::mint", event_data.data.get_token());
                     let collection = collection_data
-                        .get(&collection_id)
+                        .get(&collection_key)
                         .cloned()
-                        .unwrap_or(Collection::new(&collection_id, None, None, None));
+                        .unwrap_or(event_data.clone().into());
 
-                    let token_id = standardize_address(&mint_event.token);
-                    let nft = nft_data.get(&token_id).cloned().unwrap_or(Nft::new(
-                        &collection_id,
-                        &token_id,
-                        None,
-                    ));
+                    let nft = nft_data
+                        .get(&nft_key)
+                        .cloned()
+                        .unwrap_or(event_data.clone().into());
 
-                    let action = Action::new_from_mint_event(
-                        event,
-                        &transaction_id,
-                        &collection_id,
-                        &token_id,
-                    );
+                    let mut action: Action = event_data.clone().into();
+                    action.tx_id = Some(transaction_id.clone());
+                    action.block_time = Some(event.block_timestamp);
+                    action.block_height = Some(event.transaction_block_height);
 
-                    let action_key = format!("{}::mint", token_id.clone());
-
-                    collection_data.insert(collection_id, collection);
-                    nft_data.insert(token_id, nft);
+                    collection_data.insert(collection_key, collection);
+                    nft_data.insert(nft_key, nft);
                     action_data.insert(action_key, action);
                 },
-                "0x4::collection::Burn" => {
-                    let burn = serde_json::from_value::<MintEvent>(event.data.clone())?;
-                    let collection_id = standardize_address(&burn.collection);
+                // Example: 0x621f3e938779e93e08254327e4dd71783cf3ce6136c6d03e2fe9c6d7816a57f1
+                AptosEvent::Burn(event_data) => {
+                    let collection_key = event_data.data.get_collection();
+                    let nft_key = event_data.data.get_token();
+                    let action_key = format!("{}::burn", event_data.data.get_token());
+
                     let collection = collection_data
-                        .get(&collection_id)
+                        .get(&collection_key)
                         .cloned()
-                        .unwrap_or(Collection::new(&collection_id, None, None, None));
+                        .unwrap_or(event_data.clone().into());
 
-                    let token_id = standardize_address(&burn.token);
-                    let mut nft = nft_data.get(&token_id).cloned().unwrap_or(Nft::new(
-                        &collection_id,
-                        &token_id,
-                        None,
-                    ));
+                    let nft = nft_data
+                        .get(&nft_key)
+                        .cloned()
+                        .unwrap_or(event_data.clone().into())
+                        .set_is_burned(true);
 
-                    nft.burned = Some(false);
-
-                    let mut action = Action::new_from_mint_event(
-                        event,
-                        &transaction_id,
-                        &collection_id,
-                        &token_id,
-                    );
-
+                    let mut action: Action = event_data.clone().into();
                     action.sender = Some(sender.clone());
+                    action.tx_id = Some(transaction_id.clone());
+                    action.block_time = Some(event.block_timestamp);
+                    action.block_height = Some(event.transaction_block_height);
 
-                    let action_key = format!("{}::burn", token_id.clone());
-
-                    collection_data.insert(collection_id, collection);
-                    nft_data.insert(token_id, nft);
+                    collection_data.insert(collection_key, collection);
+                    nft_data.insert(nft_key, nft);
                     action_data.insert(action_key, action);
                 },
                 // Example: 0x30b4634d13b4f95227e3eb398c2a5d15ecff4d1732a93e89a4febc72d104a3e4
-                "0x4::collection::MintEvent" => {
-                    let collection_id = standardize_address(&event.account_address);
-                    let mint_event = serde_json::from_value::<MintEvent>(event.data.clone())?;
-                    let token_id = standardize_address(&mint_event.token);
+                AptosEvent::MintEvent(event_data) => {
+                    let collection_key = event.account_address.clone();
+                    let nft_key = event_data.data.get_token();
+                    let action_key = format!("{}::mint", event_data.data.get_token());
 
-                    let action = Action::new_from_mint_event(
-                        event,
-                        &transaction_id,
-                        &collection_id,
-                        &token_id,
-                    );
+                    let collection = collection_data
+                        .get(&collection_key)
+                        .cloned()
+                        .unwrap_or(event_data.clone().into());
 
-                    let action_key = format!("{}::mint", token_id);
+                    let nft = nft_data
+                        .get(&nft_key)
+                        .cloned()
+                        .unwrap_or(event_data.clone().into());
+
+                    let mut action: Action = event_data.clone().into();
+                    action.tx_id = Some(transaction_id.clone());
+                    action.block_time = Some(event.block_timestamp);
+                    action.block_height = Some(event.transaction_block_height);
+
+                    collection_data.insert(collection_key, collection);
+                    nft_data.insert(nft_key, nft);
                     action_data.insert(action_key, action);
                 },
                 // Example: 0x44e41340ac34ad247467febd3301e0bace3f140a029afab63281e6025d55da72
-                "0x4::collection::BurnEvent" => {
-                    let collection_id = standardize_address(&event.account_address);
-                    let burn_event = serde_json::from_value::<MintEvent>(event.data.clone())?;
-                    let token_id = standardize_address(&burn_event.token);
+                AptosEvent::BurnEvent(event_data) => {
+                    let collection_key = standardize_address(&event_data.account_address);
+                    let nft_key = event_data.data.get_token();
+                    let action_key = format!("{}::burn", event_data.data.get_token());
 
-                    if let Some(mut nft) = nft_data.get(&token_id).cloned() {
-                        nft.burned = Some(true);
-                        nft.owner = None;
-                        nft_data.insert(token_id.clone(), nft);
-                    }
+                    let collection = collection_data
+                        .get(&collection_key)
+                        .cloned()
+                        .unwrap_or(event_data.clone().into());
 
-                    let mut action = Action::new_from_burn_event(
-                        event,
-                        &transaction_id,
-                        &collection_id,
-                        &token_id,
-                    );
+                    let nft = nft_data
+                        .get(&nft_key)
+                        .cloned()
+                        .unwrap_or(event_data.clone().into())
+                        .set_is_burned(true)
+                        .set_owner(None);
 
+                    let mut action: Action = event_data.clone().into();
                     action.sender = Some(sender.clone());
+                    action.tx_id = Some(transaction_id.clone());
+                    action.block_time = Some(event.block_timestamp);
+                    action.block_height = Some(event.transaction_block_height);
 
-                    let action_key = format!("{}::burn", token_id);
+                    collection_data.insert(collection_key, collection);
+                    nft_data.insert(nft_key, nft);
                     action_data.insert(action_key, action);
                 },
                 // Example: 0xded17be0c08ff93b32339c27999ce2603155a76f8ad21ad1969a6072b0b21700
-                "0x3::token::MintTokenEvent" => {
-                    let mint_token_event =
-                        serde_json::from_value::<MintTokenEvent>(event.data.clone())?;
+                AptosEvent::MintTokenEvent(event_data) => {
+                    let collection_key = event_data.data.get_collection();
+                    let nft_key = event_data.data.get_token();
+                    let action_key = format!("{}::mint", event_data.data.get_token());
 
-                    let collection_id = mint_token_event.get_collection_id();
-                    let token_id = mint_token_event.get_token_id();
-                    let name = mint_token_event.id.name.as_str();
+                    let collection = collection_data
+                        .get(&collection_key)
+                        .cloned()
+                        .unwrap_or(event_data.clone().into());
 
-                    let nft = Nft::new(&collection_id, &token_id, None);
-                    let collection =
-                        Collection::new(&collection_id, Some(name.to_string()), None, None);
+                    let nft = nft_data
+                        .get(&nft_key)
+                        .cloned()
+                        .unwrap_or(event_data.clone().into());
 
-                    let action = Action::new_from_mint_token_event(
-                        event,
-                        &transaction_id,
-                        &collection_id,
-                        &token_id,
-                    );
+                    let mut action: Action = event_data.clone().into();
+                    action.tx_id = Some(transaction_id.clone());
+                    action.block_time = Some(event.block_timestamp);
+                    action.block_height = Some(event.transaction_block_height);
 
-                    let action_key = format!("{}::mint", token_id);
+                    collection_data.insert(collection_key, collection);
+                    nft_data.insert(nft_key, nft);
                     action_data.insert(action_key, action);
-                    collection_data.insert(collection_id, collection);
-                    nft_data.insert(token_id, nft);
                 },
                 // Example: 0x6c87ec5a0dafa2cfa94ce6935dfdd6a20232f75b9e99c918d7d83b485c1b686c
-                "0x3::token::BurnTokenEvent" => {
-                    let sender = standardize_address(&event.account_address);
-                    let burn_token_event =
-                        serde_json::from_value::<MintTokenEvent>(event.data.clone())?;
+                AptosEvent::BurnTokenEvent(event_data) => {
+                    let collection_key = event_data.data.get_collection();
+                    let nft_key = event_data.data.get_token();
+                    let action_key = format!("{}::burn", event_data.data.get_token());
 
-                    let collection_id = burn_token_event.get_collection_id();
-                    let token_id = burn_token_event.get_token_id();
-                    let name = burn_token_event.id.name.as_str();
+                    let collection = collection_data
+                        .get(&collection_key)
+                        .cloned()
+                        .unwrap_or(event_data.clone().into());
 
-                    let mut nft = Nft::new(&collection_id, &token_id, None);
-                    let collection =
-                        Collection::new(&collection_id, Some(name.to_string()), None, None);
+                    let nft = nft_data
+                        .get(&nft_key)
+                        .cloned()
+                        .unwrap_or(event_data.clone().into())
+                        .set_is_burned(true)
+                        .set_owner(None);
 
-                    let action_key = format!("{}::burn", &token_id);
-                    let mut action = Action::new_from_burn_token_event(
-                        event,
-                        &transaction_id,
-                        &collection_id,
-                        &token_id,
-                    );
+                    let mut action: Action = event_data.clone().into();
+                    action.sender = Some(sender.clone());
+                    action.tx_id = Some(transaction_id.clone());
+                    action.block_time = Some(event.block_timestamp);
+                    action.block_height = Some(event.transaction_block_height);
 
-                    action.sender = Some(sender);
-                    nft.burned = Some(true);
-
+                    collection_data.insert(collection_key, collection);
+                    nft_data.insert(nft_key, nft);
                     action_data.insert(action_key, action);
-                    collection_data.insert(collection_id, collection);
-                    nft_data.insert(token_id, nft);
                 },
                 // Example: 0xded17be0c08ff93b32339c27999ce2603155a76f8ad21ad1969a6072b0b21700
-                "0x3::token::DepositEvent" => {
+                AptosEvent::DepositEvent(event_data) => {
                     let receiver = standardize_address(&event.account_address);
-                    let deposit_event = serde_json::from_value::<DepositEvent>(event.data.clone())?;
+                    let nft_key = event_data.data.get_token();
 
-                    let token_id = deposit_event.get_token_id();
-
-                    let action_key = format!("{}::mint", token_id.as_str());
+                    let action_key = format!("{}::mint", nft_key.as_str());
                     if let Some(mut action) = action_data.get(&action_key).cloned() {
                         action.receiver = Some(receiver.clone());
                         action_data.insert(action_key, action);
                     }
 
-                    if let Some(mut nft) = nft_data.get(&token_id).cloned() {
+                    if let Some(mut nft) = nft_data.get(&nft_key).cloned() {
                         nft.owner = Some(receiver.clone());
-                        nft_data.insert(token_id.clone(), nft);
+                        nft_data.insert(nft_key.clone(), nft);
                     }
                 },
                 // Example: 0x8cc548e83e2e6926418224980f1381be989404e2e21375522aefc08fb84bd24a
-                "0x1::object::TransferEvent" => {
-                    let transfer_event =
-                        serde_json::from_value::<TransferEvent>(event.data.clone())?;
-
-                    if let Some(mut nft) = nft_data.get(&transfer_event.object).cloned() {
-                        nft.owner = Some(standardize_address(&transfer_event.to));
-                        nft_data.insert(transfer_event.object.clone(), nft.clone());
-
-                        let transfer_key = format!("{}::transfer", transfer_event.object.as_str());
+                AptosEvent::TransferEvent(event_data) => {
+                    let nft_key = event_data.data.get_object();
+                    if let Some(mut nft) = nft_data.get(&nft_key).cloned() {
+                        let transfer_key = format!("{}::transfer", nft_key.as_str());
                         if nft.collection_id.is_some() && nft.token_id.is_some() {
-                            let mut transfer_action = Action::new_from_transfer_event(
-                                event,
-                                &transaction_id,
-                                nft.clone().collection_id.unwrap(),
-                                nft.id.unwrap(),
-                            );
+                            let mut action: Action = event_data.clone().into();
+                            action.tx_id = Some(transaction_id.clone());
+                            action.block_time = Some(event.block_timestamp);
+                            action.block_height = Some(event.transaction_block_height);
 
-                            transfer_action.sender =
-                                Some(standardize_address(&transfer_event.from));
-                            transfer_action.receiver =
-                                Some(standardize_address(&transfer_event.to));
-                            action_data.insert(transfer_key, transfer_action);
+                            action_data.insert(transfer_key, action);
                         }
+
+                        nft.owner = Some(event_data.data.get_to());
+                        nft_data.insert(nft_key, nft.clone());
                     }
 
-                    let mint_key = format!("{}::mint", transfer_event.object.as_str());
+                    let mint_key = format!("{}::mint", event_data.data.get_object());
                     if let Some(mut action) = action_data.get(&mint_key).cloned() {
-                        action.receiver = Some(standardize_address(&transfer_event.to));
+                        action.receiver = Some(event_data.data.get_to());
+                        action.tx_id = Some(transaction_id.clone());
+                        action.block_time = Some(event.block_timestamp);
+                        action.block_height = Some(event.transaction_block_height);
 
                         action_data.insert(mint_key, action);
                     }
                 },
-                // ADD HANDLING FOR BURN EVENT
                 _ => {
                     let remappings = self.field_remappings.get(&event.event_type);
                     if remappings.is_none() {

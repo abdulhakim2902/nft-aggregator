@@ -1,15 +1,39 @@
 pub mod action;
 pub mod collection;
+pub mod events;
 pub mod nft;
 pub mod nft_models;
 
-use crate::config::marketplace_config::EventType;
+use crate::{
+    config::marketplace_config::EventType,
+    models::events::{
+        burn_event::{BurnData, BurnEventData, BurnTokenEventData},
+        deposit_event::DepositEventData,
+        mint_event::{MintData, MintEventData, MintTokenEventData},
+        token_event::CreateTokenDataEventData,
+        transfer_event::TransferEventData,
+        EventData,
+    },
+};
 use anyhow::{Context, Result};
 use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::Event as EventPB, utils::convert::standardize_address,
 };
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+
+pub enum AptosEvent {
+    CreateTokenDataEvent(EventData<CreateTokenDataEventData>),
+    Mint(EventData<MintData>),
+    MintEvent(EventData<MintEventData>),
+    MintTokenEvent(EventData<MintTokenEventData>),
+    Burn(EventData<BurnData>),
+    BurnEvent(EventData<BurnEventData>),
+    BurnTokenEvent(EventData<BurnTokenEventData>),
+    TransferEvent(EventData<TransferEventData>),
+    DepositEvent(EventData<DepositEventData>),
+    Unknown,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EventModel {
@@ -95,8 +119,92 @@ impl EventModel {
         Ok(result)
     }
 
-    pub fn get_data(&self) -> serde_json::Value {
-        self.data.clone()
+    pub fn parse_event_data(&self) -> AptosEvent {
+        let result =
+            match self.type_.as_str() {
+                "0x3::token::CreateTokenDataEvent" => serde_json::from_value::<
+                    CreateTokenDataEventData,
+                >(self.data.clone())
+                .map_or(AptosEvent::Unknown, |e| {
+                    AptosEvent::CreateTokenDataEvent(EventData {
+                        account_address: self.account_address.clone(),
+                        data: e,
+                    })
+                }),
+                "0x4::collection::Mint" => serde_json::from_value::<MintData>(self.data.clone())
+                    .map_or(AptosEvent::Unknown, |e| {
+                        AptosEvent::Mint(EventData {
+                            account_address: self.account_address.clone(),
+                            data: e,
+                        })
+                    }),
+
+                "0x4::collection::MintEvent" => serde_json::from_value::<MintEventData>(
+                    self.data.clone(),
+                )
+                .map_or(AptosEvent::Unknown, |e| {
+                    AptosEvent::MintEvent(EventData {
+                        account_address: self.account_address.clone(),
+                        data: e,
+                    })
+                }),
+
+                "0x4::collection::MintTokenEvent" => serde_json::from_value::<MintTokenEventData>(
+                    self.data.clone(),
+                )
+                .map_or(AptosEvent::Unknown, |e| {
+                    AptosEvent::MintTokenEvent(EventData {
+                        account_address: self.account_address.clone(),
+                        data: e,
+                    })
+                }),
+                "0x4::collection::Burn" => serde_json::from_value::<BurnData>(self.data.clone())
+                    .map_or(AptosEvent::Unknown, |e| {
+                        AptosEvent::Burn(EventData {
+                            account_address: self.account_address.clone(),
+                            data: e,
+                        })
+                    }),
+                "0x4::collection::BurnEvent" => serde_json::from_value::<BurnEventData>(
+                    self.data.clone(),
+                )
+                .map_or(AptosEvent::Unknown, |e| {
+                    AptosEvent::BurnEvent(EventData {
+                        account_address: self.account_address.clone(),
+                        data: e,
+                    })
+                }),
+                "0x4::collection::BurnTokenEvent" => serde_json::from_value::<BurnTokenEventData>(
+                    self.data.clone(),
+                )
+                .map_or(AptosEvent::Unknown, |e| {
+                    AptosEvent::BurnTokenEvent(EventData {
+                        account_address: self.account_address.clone(),
+                        data: e,
+                    })
+                }),
+                "0x3::token::DepositEvent" => serde_json::from_value::<DepositEventData>(
+                    self.data.clone(),
+                )
+                .map_or(AptosEvent::Unknown, |e| {
+                    AptosEvent::DepositEvent(EventData {
+                        account_address: self.account_address.clone(),
+                        data: e,
+                    })
+                }),
+                "0x1::object::TransferEvent" => serde_json::from_value::<TransferEventData>(
+                    self.data.clone(),
+                )
+                .map_or(AptosEvent::Unknown, |e| {
+                    AptosEvent::TransferEvent(EventData {
+                        account_address: self.account_address.clone(),
+                        data: e,
+                    })
+                }),
+                _ => AptosEvent::Unknown,
+            };
+
+        result
     }
 
     pub fn get_tx_index(&self) -> i64 {

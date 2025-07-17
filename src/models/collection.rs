@@ -27,24 +27,6 @@ pub struct Collection {
 }
 
 impl Collection {
-    pub fn new(
-        collection_id: &str,
-        name: Option<String>,
-        description: Option<String>,
-        uri: Option<String>,
-    ) -> Self {
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
-
-        Collection {
-            id: Some(id),
-            slug: Some(collection_id.to_lowercase()),
-            supply: None,
-            title: name,
-            description,
-            cover_url: uri,
-        }
-    }
-
     pub fn new_from_token_resource(resource: &WriteResource) -> Self {
         if &resource.type_str == "0x4::token::Token" {
             if let Some(inner) = serde_json::from_str::<TokenStruct>(resource.data.as_str()).ok() {
@@ -150,91 +132,4 @@ pub struct UnlimitedSupplyStruct {
     pub current_supply: BigDecimal,
     #[serde(deserialize_with = "deserialize_from_string")]
     pub total_minted: BigDecimal,
-}
-
-// Event
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct MintEvent {
-    #[serde(default)]
-    pub collection: String,
-    pub token: String,
-    pub previous_owner: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CreateTokenDataEvent {
-    pub description: String,
-    pub id: CreateTokenDataIdStruct,
-    pub name: String,
-    pub uri: String,
-}
-
-impl CreateTokenDataEvent {
-    pub fn get_collection_id(&self) -> String {
-        self.id.get_collection_id()
-    }
-
-    pub fn get_token_id(&self) -> String {
-        self.name.replace(" ", "%20")
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct MintTokenEvent {
-    pub id: CreateTokenDataIdStruct,
-}
-
-impl MintTokenEvent {
-    pub fn get_collection_id(&self) -> String {
-        self.id.get_collection_id()
-    }
-
-    pub fn get_token_id(&self) -> String {
-        self.id.name.replace(" ", "%20")
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CreateTokenDataIdStruct {
-    pub collection: String,
-    pub creator: String,
-    pub name: String,
-}
-
-impl CreateTokenDataIdStruct {
-    pub fn get_collection_id(&self) -> String {
-        let alphanumeric_only = self
-            .collection
-            .chars()
-            .filter(|&c| c.is_alphanumeric() || c == ' ')
-            .collect::<String>();
-        let name = alphanumeric_only
-            .split_whitespace()
-            .collect::<Vec<&str>>()
-            .join("-");
-        let split_addr = self.creator.split("").collect::<Vec<&str>>();
-        let trunc_addr = &split_addr[3..11].join("");
-
-        format!("{}-{}", name, trunc_addr)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DepositEvent {
-    pub id: DepositTokenDataIdStruct,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DepositTokenDataIdStruct {
-    pub token_data_id: CreateTokenDataIdStruct,
-}
-
-impl DepositEvent {
-    pub fn get_collection_id(&self) -> String {
-        self.id.token_data_id.get_collection_id()
-    }
-
-    pub fn get_token_id(&self) -> String {
-        self.id.token_data_id.name.replace(" ", "%20")
-    }
 }

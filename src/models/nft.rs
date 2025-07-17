@@ -23,22 +23,6 @@ pub struct Nft {
 }
 
 impl Nft {
-    pub fn new(collection_id: &str, token_id: &str, uri: Option<String>) -> Self {
-        let key = format!("{}::{}", collection_id, token_id);
-        let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, key.as_bytes());
-        let collection_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection_id.as_bytes());
-
-        Nft {
-            id: Some(id),
-            media_url: uri,
-            name: None,
-            owner: None,
-            token_id: Some(token_id.to_string()),
-            collection_id: Some(collection_id),
-            burned: None,
-        }
-    }
-
     pub fn new_from_resource(resource: &WriteResource) -> Self {
         let token_id = standardize_address(&resource.address);
 
@@ -51,6 +35,16 @@ impl Nft {
             collection_id: None,
             burned: None,
         }
+    }
+
+    pub fn set_is_burned(mut self, burned: bool) -> Self {
+        self.burned = Some(burned);
+        self
+    }
+
+    pub fn set_owner(mut self, owner: Option<String>) -> Self {
+        self.owner = owner;
+        self
     }
 
     pub fn set_nft_name_from_write_resource(mut self, resource: &WriteResource) -> Self {
@@ -111,11 +105,4 @@ pub struct TokenIdentifiersStruct {
 pub struct TokenIdentifiersNameStruct {
     pub padding: String,
     pub value: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TransferEvent {
-    pub from: String,
-    pub object: String,
-    pub to: String,
 }
