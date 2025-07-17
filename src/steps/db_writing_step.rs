@@ -2,6 +2,7 @@ use crate::{
     models::{
         action::Action,
         collection::Collection,
+        contract::Contract,
         nft::Nft,
         nft_models::{
             CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
@@ -42,6 +43,7 @@ impl Processable for DBWritingStep {
         Vec<CurrentNFTMarketplaceListing>,
         Vec<CurrentNFTMarketplaceTokenOffer>,
         Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<Contract>,
         Vec<Collection>,
         Vec<Nft>,
         Vec<Action>,
@@ -56,13 +58,22 @@ impl Processable for DBWritingStep {
             Vec<CurrentNFTMarketplaceListing>,
             Vec<CurrentNFTMarketplaceTokenOffer>,
             Vec<CurrentNFTMarketplaceCollectionOffer>,
+            Vec<Contract>,
             Vec<Collection>,
             Vec<Nft>,
             Vec<Action>,
         )>,
     ) -> Result<Option<TransactionContext<()>>, ProcessorError> {
-        let (activities, listings, token_offers, collection_offers, collections, nfts, actions) =
-            input.data;
+        let (
+            activities,
+            listings,
+            token_offers,
+            collection_offers,
+            contracts,
+            collections,
+            nfts,
+            actions,
+        ) = input.data;
 
         let mut deduped_activities: Vec<NftMarketplaceActivity> = activities
             .into_iter()
@@ -131,6 +142,13 @@ impl Processable for DBWritingStep {
 
         deduped_collection_offers.sort_by(|a, b| a.collection_offer_id.cmp(&b.collection_offer_id));
 
+        let deduped_contracts: Vec<Contract> = contracts
+            .into_iter()
+            .map(|contract| (contract.id.clone(), contract))
+            .collect::<HashMap<_, _>>()
+            .into_values()
+            .collect();
+
         let deduped_collections: Vec<Collection> = collections
             .into_iter()
             .map(|collection| (collection.id.clone(), collection))
@@ -182,6 +200,13 @@ impl Processable for DBWritingStep {
             200,
         );
 
+        let contract_result = execute_in_chunks(
+            self.db_pool.clone(),
+            insert_contracts,
+            &deduped_contracts,
+            200,
+        );
+
         let collection_result = execute_in_chunks(
             self.db_pool.clone(),
             insert_collections,
@@ -199,6 +224,7 @@ impl Processable for DBWritingStep {
             listings_result,
             token_offers_result,
             collection_offers_result,
+            contract_result,
             collection_result,
             nft_result,
             action_result,
@@ -207,6 +233,7 @@ impl Processable for DBWritingStep {
             listings_result,
             token_offers_result,
             collection_offers_result,
+            contract_result,
             collection_result,
             nft_result,
             action_result,
@@ -217,6 +244,7 @@ impl Processable for DBWritingStep {
             listings_result,
             token_offers_result,
             collection_offers_result,
+            contract_result,
             collection_result,
             nft_result,
             action_result,
@@ -331,6 +359,17 @@ pub fn insert_current_nft_marketplace_collection_offers(
             bid_key.eq(excluded(bid_key)),
         ))
         .filter(last_transaction_version.le(excluded(last_transaction_version)))
+}
+
+pub fn insert_contracts(
+    items_to_insert: Vec<Contract>,
+) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
+    use crate::schema::contracts::dsl::*;
+
+    diesel::insert_into(schema::contracts::table)
+        .values(items_to_insert)
+        .on_conflict(id)
+        .do_nothing()
 }
 
 pub fn insert_collections(
