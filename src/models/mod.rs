@@ -4,8 +4,9 @@ pub mod collection;
 pub mod commission;
 pub mod contract;
 pub mod events;
+pub mod listing;
+pub mod marketplace;
 pub mod nft;
-pub mod nft_models;
 pub mod resources;
 
 use crate::{

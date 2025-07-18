@@ -6,11 +6,11 @@ use crate::{
         collection::Collection,
         commission::Commission,
         contract::Contract,
-        nft::Nft,
-        nft_models::{
+        marketplace::{
             CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenBid, NftMarketplaceActivity,
         },
+        nft::Nft,
     },
     steps::remappers::event_remapper::EventRemapper,
 };

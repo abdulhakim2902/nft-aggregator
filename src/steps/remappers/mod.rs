@@ -1,8 +1,8 @@
-use crate::models::nft_models::{
+use crate::models::marketplace::{
     CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
     CurrentNFTMarketplaceTokenBid, MarketplaceField, MarketplaceModel,
-    CURRENT_NFT_MARKETPLACE_COLLECTION_OFFERS_TABLE_NAME,
-    CURRENT_NFT_MARKETPLACE_LISTINGS_TABLE_NAME, CURRENT_NFT_MARKETPLACE_TOKEN_OFFERS_TABLE_NAME,
+    CURRENT_NFT_MARKETPLACE_COLLECTION_BIDS_TABLE_NAME,
+    CURRENT_NFT_MARKETPLACE_LISTINGS_TABLE_NAME, CURRENT_NFT_MARKETPLACE_TOKEN_BIDS_TABLE_NAME,
     NFT_MARKETPLACE_ACTIVITIES_TABLE_NAME,
 };
 
@@ -36,10 +36,8 @@ impl MarketplaceModel for SecondaryModel {
     fn table_name(&self) -> &'static str {
         match self {
             SecondaryModel::Listing(_) => CURRENT_NFT_MARKETPLACE_LISTINGS_TABLE_NAME,
-            SecondaryModel::TokenBid(_) => CURRENT_NFT_MARKETPLACE_TOKEN_OFFERS_TABLE_NAME,
-            SecondaryModel::CollectionBid(_) => {
-                CURRENT_NFT_MARKETPLACE_COLLECTION_OFFERS_TABLE_NAME
-            },
+            SecondaryModel::TokenBid(_) => CURRENT_NFT_MARKETPLACE_TOKEN_BIDS_TABLE_NAME,
+            SecondaryModel::CollectionBid(_) => CURRENT_NFT_MARKETPLACE_COLLECTION_BIDS_TABLE_NAME,
         }
     }
 
@@ -73,10 +71,8 @@ impl TableType {
         match table_name {
             NFT_MARKETPLACE_ACTIVITIES_TABLE_NAME => Some(TableType::Activities),
             CURRENT_NFT_MARKETPLACE_LISTINGS_TABLE_NAME => Some(TableType::Listings),
-            CURRENT_NFT_MARKETPLACE_TOKEN_OFFERS_TABLE_NAME => Some(TableType::TokenOffers),
-            CURRENT_NFT_MARKETPLACE_COLLECTION_OFFERS_TABLE_NAME => {
-                Some(TableType::CollectionOffers)
-            },
+            CURRENT_NFT_MARKETPLACE_TOKEN_BIDS_TABLE_NAME => Some(TableType::TokenOffers),
+            CURRENT_NFT_MARKETPLACE_COLLECTION_BIDS_TABLE_NAME => Some(TableType::CollectionOffers),
             _ => None,
         }
     }

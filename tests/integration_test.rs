@@ -14,7 +14,7 @@ use nft_aggregator::{
         processor_mode::{ProcessorMode, TestingConfig},
         DbConfig, IndexerProcessorConfig,
     },
-    models::nft_models::{
+    models::marketplace::{
         CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
         CurrentNFTMarketplaceTokenBid, NftMarketplaceActivity,
     },

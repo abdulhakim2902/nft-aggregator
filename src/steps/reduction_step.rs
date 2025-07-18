@@ -5,12 +5,12 @@ use crate::{
         collection::Collection,
         commission::Commission,
         contract::Contract,
-        nft::Nft,
-        nft_models::{
+        marketplace::{
             CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenBid, MarketplaceField, MarketplaceModel,
             NftMarketplaceActivity,
         },
+        nft::Nft,
     },
 };
 use aptos_indexer_processor_sdk::{

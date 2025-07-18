@@ -5,11 +5,12 @@ use crate::{
         collection::Collection,
         commission::Commission,
         contract::Contract,
-        nft::Nft,
-        nft_models::{
+        listing::Listing,
+        marketplace::{
             CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenBid, NftMarketplaceActivity,
         },
+        nft::Nft,
     },
     postgres::postgres_utils::{execute_in_chunks, ArcDbPool},
     schema,
@@ -23,7 +24,6 @@ use aptos_indexer_processor_sdk::{
 use diesel::{
     pg::{upsert::excluded, Pg},
     query_builder::QueryFragment,
-    query_dsl::methods::FilterDsl,
     ExpressionMethods,
 };
 use tonic::async_trait;
@@ -124,16 +124,15 @@ impl Processable for DBWritingStep {
 
         deduped_bids.extend(deduped_collection_bids);
 
-        let mut deduped_listings: Vec<CurrentNFTMarketplaceListing> = listings
+        let deduped_listings: Vec<Listing> = listings
             .into_iter()
             .map(|listing| {
                 let key = (listing.token_data_id.clone(), listing.marketplace.clone());
-                (key, listing)
+                (key, listing.into())
             })
             .collect::<HashMap<_, _>>()
             .into_values()
             .collect();
-        deduped_listings.sort_by(|a, b| a.token_data_id.cmp(&b.token_data_id));
 
         let deduped_contracts: Vec<Contract> = contracts
             .into_iter()
@@ -165,13 +164,6 @@ impl Processable for DBWritingStep {
             .into_values()
             .collect();
 
-        let listings_result = execute_in_chunks(
-            self.db_pool.clone(),
-            insert_current_nft_marketplace_listings,
-            &deduped_listings,
-            200,
-        );
-
         let contract_result = execute_in_chunks(
             self.db_pool.clone(),
             insert_contracts,
@@ -198,12 +190,19 @@ impl Processable for DBWritingStep {
 
         let bid_result = execute_in_chunks(self.db_pool.clone(), insert_bids, &deduped_bids, 200);
 
+        let listing_result = execute_in_chunks(
+            self.db_pool.clone(),
+            insert_listings,
+            &deduped_listings,
+            200,
+        );
+
         let nft_result = execute_in_chunks(self.db_pool.clone(), insert_nfts, &deduped_nfts, 200);
 
         let (
             action_result,
             bid_result,
-            listings_result,
+            listing_result,
             contract_result,
             collection_result,
             nft_result,
@@ -211,7 +210,7 @@ impl Processable for DBWritingStep {
         ) = tokio::join!(
             action_result,
             bid_result,
-            listings_result,
+            listing_result,
             contract_result,
             collection_result,
             nft_result,
@@ -221,7 +220,7 @@ impl Processable for DBWritingStep {
         for result in [
             action_result,
             bid_result,
-            listings_result,
+            listing_result,
             contract_result,
             collection_result,
             nft_result,
@@ -251,56 +250,6 @@ impl NamedStep for DBWritingStep {
     fn name(&self) -> String {
         "DBWritingStep".to_string()
     }
-}
-
-pub fn insert_current_nft_marketplace_listings(
-    items_to_insert: Vec<CurrentNFTMarketplaceListing>,
-) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
-    use crate::schema::current_nft_marketplace_listings::dsl::*;
-
-    diesel::insert_into(schema::current_nft_marketplace_listings::table)
-        .values(items_to_insert)
-        .on_conflict((token_data_id, marketplace))
-        .do_update()
-        .set((
-            listing_id.eq(excluded(listing_id)),
-            collection_id.eq(excluded(collection_id)),
-            seller.eq(excluded(seller)),
-            price.eq(excluded(price)),
-            token_amount.eq(excluded(token_amount)),
-            token_name.eq(excluded(token_name)),
-            is_deleted.eq(excluded(is_deleted)),
-            contract_address.eq(excluded(contract_address)),
-            last_transaction_timestamp.eq(excluded(last_transaction_timestamp)),
-            last_transaction_version.eq(excluded(last_transaction_version)),
-            standard_event_type.eq(excluded(standard_event_type)),
-        ))
-        .filter(last_transaction_version.le(excluded(last_transaction_version)))
-}
-
-pub fn insert_current_nft_marketplace_collection_offers(
-    items_to_insert: Vec<CurrentNFTMarketplaceCollectionBid>,
-) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
-    use crate::schema::current_nft_marketplace_collection_offers::dsl::*;
-
-    diesel::insert_into(schema::current_nft_marketplace_collection_offers::table)
-        .values(items_to_insert)
-        .on_conflict((collection_offer_id, marketplace))
-        .do_update()
-        .set((
-            collection_id.eq(excluded(collection_id)),
-            buyer.eq(excluded(buyer)),
-            price.eq(excluded(price)),
-            remaining_token_amount.eq(excluded(remaining_token_amount)),
-            is_deleted.eq(excluded(is_deleted)),
-            contract_address.eq(excluded(contract_address)),
-            last_transaction_version.eq(excluded(last_transaction_version)),
-            last_transaction_timestamp.eq(excluded(last_transaction_timestamp)),
-            token_data_id.eq(excluded(token_data_id)),
-            standard_event_type.eq(excluded(standard_event_type)),
-            bid_key.eq(excluded(bid_key)),
-        ))
-        .filter(last_transaction_version.le(excluded(last_transaction_version)))
 }
 
 pub fn insert_contracts(
@@ -381,6 +330,17 @@ pub fn insert_bids(
     use crate::schema::bids::dsl::*;
 
     diesel::insert_into(schema::bids::table)
+        .values(items_to_insert)
+        .on_conflict(id)
+        .do_nothing()
+}
+
+pub fn insert_listings(
+    items_to_insert: Vec<Listing>,
+) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
+    use crate::schema::listings::dsl::*;
+
+    diesel::insert_into(schema::listings::table)
         .values(items_to_insert)
         .on_conflict(id)
         .do_nothing()

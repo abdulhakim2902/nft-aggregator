@@ -5,7 +5,7 @@ use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub const ACTIONS_TABLE_NAME: &str = "bids";
+pub const BIDS_TABLE_NAME: &str = "bids";
 
 #[derive(
     Clone, Debug, Default, Deserialize, FieldCount, Identifiable, Insertable, Serialize, Queryable,

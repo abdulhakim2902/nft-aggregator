@@ -1,15 +1,9 @@
 use crate::{
-    models::{action::Action, bid::Bid, EventModel},
-    schema::{
-        current_nft_marketplace_collection_offers, current_nft_marketplace_listings,
-        current_nft_marketplace_token_offers, nft_marketplace_activities,
-    },
+    models::{action::Action, bid::Bid, listing::Listing, EventModel},
     utils::generate_uuid_from_str,
 };
 use aptos_indexer_processor_sdk::aptos_indexer_transaction_stream::utils::time::parse_timestamp_secs;
 use chrono::NaiveDateTime;
-use diesel::prelude::*;
-use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 use uuid::Uuid;
@@ -19,26 +13,21 @@ pub const DEFAULT_BUYER: &str = "unknown";
 
 pub const NFT_MARKETPLACE_ACTIVITIES_TABLE_NAME: &str = "nft_marketplace_activities";
 pub const CURRENT_NFT_MARKETPLACE_LISTINGS_TABLE_NAME: &str = "current_nft_marketplace_listings";
-pub const CURRENT_NFT_MARKETPLACE_TOKEN_OFFERS_TABLE_NAME: &str =
-    "current_nft_marketplace_token_offers";
-pub const CURRENT_NFT_MARKETPLACE_COLLECTION_OFFERS_TABLE_NAME: &str =
-    "current_nft_marketplace_collection_offers";
+pub const CURRENT_NFT_MARKETPLACE_TOKEN_BIDS_TABLE_NAME: &str =
+    "current_nft_marketplace_token_bids";
+pub const CURRENT_NFT_MARKETPLACE_COLLECTION_BIDS_TABLE_NAME: &str =
+    "current_nft_marketplace_collection_bids";
 
 /**
  * NftMarketplaceActivity is the main model for storing NFT marketplace activities.
 */
-#[derive(
-    Clone, Debug, Default, Deserialize, FieldCount, Identifiable, Insertable, Serialize, Queryable,
-)]
-#[diesel(primary_key(txn_version, index, marketplace))]
-#[diesel(table_name = nft_marketplace_activities)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct NftMarketplaceActivity {
     pub txn_id: String,
     pub txn_version: i64,
     pub index: i64,
     pub raw_event_type: String,
     pub standard_event_type: String,
-    #[diesel(sql_type = Text)] // Ensure compatibility with PostgreSQL
     pub creator_address: Option<String>,
     pub collection_id: Option<String>,
     pub collection_name: Option<String>,
@@ -76,7 +65,8 @@ impl From<NftMarketplaceActivity> for Action {
             block_time: Some(value.block_timestamp),
             market_name: Some(value.marketplace),
             block_height: Some(value.block_height),
-            ..Default::default()
+            // TODO: handle usd price
+            usd_price: None,
         }
     }
 }
@@ -211,11 +201,7 @@ impl MarketplaceModel for NftMarketplaceActivity {
     }
 }
 
-#[derive(
-    Clone, Debug, Default, Deserialize, FieldCount, Identifiable, Insertable, Serialize, Queryable,
-)]
-#[diesel(primary_key(token_data_id, marketplace))]
-#[diesel(table_name = current_nft_marketplace_listings)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CurrentNFTMarketplaceListing {
     pub token_data_id: String,
     pub listing_id: Option<String>,
@@ -230,6 +216,52 @@ pub struct CurrentNFTMarketplaceListing {
     pub last_transaction_version: i64,
     pub last_transaction_timestamp: NaiveDateTime,
     pub standard_event_type: String,
+    pub block_height: i64,
+    pub event_index: i64,
+}
+
+impl From<CurrentNFTMarketplaceListing> for Listing {
+    fn from(value: CurrentNFTMarketplaceListing) -> Self {
+        Self {
+            id: Some(value.get_id()),
+            tx_index: Some(value.get_tx_index()),
+            contract_id: value.get_contract_id(),
+            nft_id: Some(value.get_nft_id()),
+            market_name: Some(value.marketplace),
+            seller: value.seller,
+            price: Some(value.price),
+            price_str: Some(value.price.to_string()),
+            block_time: Some(value.last_transaction_timestamp),
+            listed: Some(true),
+            nonce: value.listing_id,
+            block_height: Some(value.block_height),
+            // TODO: handle commission_id
+            commission_id: None,
+        }
+    }
+}
+
+impl CurrentNFTMarketplaceListing {
+    pub fn get_id(&self) -> Uuid {
+        generate_uuid_from_str(&format!(
+            "{}::{}::list",
+            self.contract_address, self.token_data_id
+        ))
+    }
+
+    pub fn get_tx_index(&self) -> i64 {
+        self.last_transaction_version * 100_000 + self.event_index
+    }
+
+    pub fn get_nft_id(&self) -> Uuid {
+        generate_uuid_from_str(&self.token_data_id)
+    }
+
+    pub fn get_contract_id(&self) -> Option<Uuid> {
+        self.collection_id
+            .clone()
+            .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
+    }
 }
 
 impl MarketplaceModel for CurrentNFTMarketplaceListing {
@@ -319,15 +351,13 @@ impl CurrentNFTMarketplaceListing {
             last_transaction_version: event.transaction_version,
             last_transaction_timestamp: event.block_timestamp,
             standard_event_type: event_type,
+            block_height: event.transaction_block_height,
+            event_index: event.event_index,
         }
     }
 }
 
-#[derive(
-    Clone, Debug, Default, Deserialize, FieldCount, Identifiable, Insertable, Serialize, Queryable,
-)]
-#[diesel(primary_key(token_data_id, buyer, marketplace))]
-#[diesel(table_name = current_nft_marketplace_token_offers)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CurrentNFTMarketplaceTokenBid {
     pub token_data_id: String,
     pub offer_id: Option<String>,
@@ -361,18 +391,23 @@ impl From<CurrentNFTMarketplaceTokenBid> for Bid {
             nonce: value.offer_id,
             bid_type: Some("solo".to_string()),
             bidder: Some(value.buyer),
-            receiver: None,
             status: Some("active".to_string()),
             remaining_count: value.token_amount,
-            canceled_tx_id: None,
             created_tx_id: Some(value.txn_id),
+            canceled_tx_id: None,
+            receiver: None,
         }
     }
 }
 
 impl CurrentNFTMarketplaceTokenBid {
     pub fn get_id(&self) -> Uuid {
-        generate_uuid_from_str(&format!("{}::{}", self.token_data_id, self.buyer))
+        generate_uuid_from_str(&format!(
+            "{}::{}::{}::bid",
+            self.contract_address,
+            self.collection_id.clone().unwrap_or_default(),
+            self.token_data_id
+        ))
     }
 
     pub fn get_collection_id(&self) -> Option<Uuid> {
@@ -433,7 +468,7 @@ impl MarketplaceModel for CurrentNFTMarketplaceTokenBid {
     }
 
     fn table_name(&self) -> &'static str {
-        CURRENT_NFT_MARKETPLACE_TOKEN_OFFERS_TABLE_NAME
+        CURRENT_NFT_MARKETPLACE_TOKEN_BIDS_TABLE_NAME
     }
 
     fn updated_at(&self) -> i64 {
@@ -502,11 +537,7 @@ impl CurrentNFTMarketplaceTokenBid {
     }
 }
 
-#[derive(
-    Clone, Debug, Default, Deserialize, FieldCount, Identifiable, Insertable, Serialize, Queryable,
-)]
-#[diesel(primary_key(collection_offer_id, marketplace))]
-#[diesel(table_name = current_nft_marketplace_collection_offers)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CurrentNFTMarketplaceCollectionBid {
     pub offer_id: Option<String>,
     pub collection_offer_id: String,
@@ -529,29 +560,33 @@ pub struct CurrentNFTMarketplaceCollectionBid {
 impl From<CurrentNFTMarketplaceCollectionBid> for Bid {
     fn from(value: CurrentNFTMarketplaceCollectionBid) -> Self {
         Self {
-            id: None,
+            id: Some(value.get_id()),
             market_contract_id: Some(value.get_market_contract_id()),
             contract_id: value.get_contract_id(),
             collection_id: value.get_collection_id(),
-            nft_id: None,
             price: Some(value.price),
             price_str: Some(value.price.to_string()),
             expires_at: value.expiration_time,
             nonce: value.offer_id,
             bid_type: Some("collection".to_string()),
             bidder: Some(value.buyer),
-            receiver: None,
             status: Some("active".to_string()),
             remaining_count: value.remaining_token_amount,
             canceled_tx_id: None,
             created_tx_id: Some(value.txn_id),
+            nft_id: None,
+            receiver: None,
         }
     }
 }
 
 impl CurrentNFTMarketplaceCollectionBid {
     pub fn get_id(&self) -> Uuid {
-        generate_uuid_from_str(&self.collection_offer_id)
+        generate_uuid_from_str(&format!(
+            "{}::{}::bid",
+            self.contract_address,
+            self.collection_id.clone().unwrap_or_default()
+        ))
     }
 
     pub fn get_collection_id(&self) -> Option<Uuid> {
@@ -609,7 +644,7 @@ impl MarketplaceModel for CurrentNFTMarketplaceCollectionBid {
     }
 
     fn table_name(&self) -> &'static str {
-        CURRENT_NFT_MARKETPLACE_COLLECTION_OFFERS_TABLE_NAME
+        CURRENT_NFT_MARKETPLACE_COLLECTION_BIDS_TABLE_NAME
     }
 
     fn updated_at(&self) -> i64 {

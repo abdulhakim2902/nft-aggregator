@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS bids (
   id uuid NOT NULL, 
   bidder VARCHAR(66) NOT NULL,
-  canceled_tx_id VARCHAR(66) NOT NULL,
+  canceled_tx_id VARCHAR(66) NULL,
   collection_id uuid DEFAULT NULL,
   contract_id uuid DEFAULT NULL,
   created_tx_id VARCHAR(66) NOT NULL,

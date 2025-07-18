@@ -7,12 +7,12 @@ use crate::{
         collection::Collection,
         commission::Commission,
         contract::Contract,
-        nft::Nft,
-        nft_models::{
+        marketplace::{
             CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
             CurrentNFTMarketplaceTokenBid, MarketplaceField, MarketplaceModel,
             NftMarketplaceActivity,
         },
+        nft::Nft,
         resources::parse_resource_data,
         AptosEvent, AptosResource, EventModel,
     },
@@ -104,8 +104,8 @@ impl EventRemapper {
         }
 
         let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
-        let mut current_token_offers: Vec<CurrentNFTMarketplaceTokenBid> = Vec::new();
-        let mut current_collection_offers: Vec<CurrentNFTMarketplaceCollectionBid> = Vec::new();
+        let mut current_token_bids: Vec<CurrentNFTMarketplaceTokenBid> = Vec::new();
+        let mut current_collection_bids: Vec<CurrentNFTMarketplaceCollectionBid> = Vec::new();
         let mut current_listings: Vec<CurrentNFTMarketplaceListing> = Vec::new();
 
         let mut collection_data: HashMap<String, Collection> = HashMap::new();
@@ -496,7 +496,7 @@ impl EventRemapper {
                                     self.marketplace_name.clone(),
                                     &event,
                                     true,
-                                    MarketplaceEventType::Unlist.to_string(),
+                                    MarketplaceEventType::List.to_string(),
                                 ),
                             ))
                         },
@@ -507,7 +507,7 @@ impl EventRemapper {
                                     self.marketplace_name.clone(),
                                     &event,
                                     true,
-                                    MarketplaceEventType::Buy.to_string(),
+                                    MarketplaceEventType::List.to_string(),
                                 ),
                             ))
                         },
@@ -527,12 +527,28 @@ impl EventRemapper {
                         Some(MarketplaceEventType::UnlistBid) => {
                             activity.standard_event_type =
                                 MarketplaceEventType::UnlistBid.to_string();
-                            None
+                            Some(SecondaryModel::TokenBid(
+                                CurrentNFTMarketplaceTokenBid::build_default(
+                                    self.marketplace_name.clone(),
+                                    &event,
+                                    transaction_id.clone(),
+                                    true,
+                                    MarketplaceEventType::SoloBid.to_string(),
+                                ),
+                            ))
                         },
                         Some(MarketplaceEventType::AcceptBid) => {
                             activity.standard_event_type =
                                 MarketplaceEventType::AcceptBid.to_string();
-                            None
+                            Some(SecondaryModel::TokenBid(
+                                CurrentNFTMarketplaceTokenBid::build_default(
+                                    self.marketplace_name.clone(),
+                                    &event,
+                                    transaction_id.clone(),
+                                    true,
+                                    MarketplaceEventType::SoloBid.to_string(),
+                                ),
+                            ))
                         },
                         Some(MarketplaceEventType::CollectionBid) => {
                             activity.standard_event_type =
@@ -550,12 +566,28 @@ impl EventRemapper {
                         Some(MarketplaceEventType::CancelCollectionBid) => {
                             activity.standard_event_type =
                                 MarketplaceEventType::CancelCollectionBid.to_string();
-                            None
+                            Some(SecondaryModel::CollectionBid(
+                                CurrentNFTMarketplaceCollectionBid::build_default(
+                                    self.marketplace_name.clone(),
+                                    &event,
+                                    transaction_id.clone(),
+                                    true,
+                                    MarketplaceEventType::CollectionBid.to_string(),
+                                ),
+                            ))
                         },
                         Some(MarketplaceEventType::AcceptCollectionBid) => {
                             activity.standard_event_type =
                                 MarketplaceEventType::AcceptCollectionBid.to_string();
-                            None
+                            Some(SecondaryModel::CollectionBid(
+                                CurrentNFTMarketplaceCollectionBid::build_default(
+                                    self.marketplace_name.clone(),
+                                    &event,
+                                    transaction_id.clone(),
+                                    true,
+                                    MarketplaceEventType::CollectionBid.to_string(),
+                                ),
+                            ))
                         },
                         Some(MarketplaceEventType::Unknown) => {
                             warn!("Skipping unrecognized event type '{}'", event_type_str);
@@ -696,15 +728,21 @@ impl EventRemapper {
                             match model {
                                 SecondaryModel::Listing(listing) => {
                                     activities.push(activity);
-                                    current_listings.push(listing);
+                                    if !listing.is_deleted {
+                                        current_listings.push(listing);
+                                    }
                                 },
-                                SecondaryModel::TokenBid(token_offer) => {
+                                SecondaryModel::TokenBid(token_bid) => {
                                     activities.push(activity);
-                                    current_token_offers.push(token_offer);
+                                    if !token_bid.is_deleted {
+                                        current_token_bids.push(token_bid);
+                                    }
                                 },
-                                SecondaryModel::CollectionBid(collection_offer) => {
+                                SecondaryModel::CollectionBid(collection_bid) => {
                                     activities.push(activity);
-                                    current_collection_offers.push(collection_offer);
+                                    if !collection_bid.is_deleted {
+                                        current_collection_bids.push(collection_bid);
+                                    }
                                 },
                             }
                         } else {
@@ -724,8 +762,8 @@ impl EventRemapper {
         Ok((
             activities,
             current_listings,
-            current_token_offers,
-            current_collection_offers,
+            current_token_bids,
+            current_collection_bids,
             contracts,
             collections,
             nfts,
