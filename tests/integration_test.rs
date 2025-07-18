@@ -15,8 +15,8 @@ use nft_aggregator::{
         DbConfig, IndexerProcessorConfig,
     },
     models::nft_models::{
-        CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
-        CurrentNFTMarketplaceTokenOffer, NftMarketplaceActivity,
+        CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
+        CurrentNFTMarketplaceTokenBid, NftMarketplaceActivity,
     },
     processor::Processor,
 };
@@ -67,14 +67,14 @@ fn load_data(conn: &mut PgConnection) -> anyhow::Result<HashMap<String, serde_js
     );
 
     // Load token offers
-    let token_offers: Vec<CurrentNFTMarketplaceTokenOffer> =
+    let token_offers: Vec<CurrentNFTMarketplaceTokenBid> =
         current_nft_marketplace_token_offers::table
             .order_by((
                 current_nft_marketplace_token_offers::token_data_id,
                 current_nft_marketplace_token_offers::buyer,
                 current_nft_marketplace_token_offers::marketplace,
             ))
-            .load::<CurrentNFTMarketplaceTokenOffer>(conn)
+            .load::<CurrentNFTMarketplaceTokenBid>(conn)
             .map_err(|e| anyhow::anyhow!("Failed to load token offers: {}", e))?;
     result.insert(
         "current_nft_marketplace_token_offers".to_string(),
@@ -82,13 +82,13 @@ fn load_data(conn: &mut PgConnection) -> anyhow::Result<HashMap<String, serde_js
     );
 
     // Load collection offers
-    let collection_offers: Vec<CurrentNFTMarketplaceCollectionOffer> =
+    let collection_offers: Vec<CurrentNFTMarketplaceCollectionBid> =
         current_nft_marketplace_collection_offers::table
             .order_by((
                 current_nft_marketplace_collection_offers::collection_offer_id,
                 current_nft_marketplace_collection_offers::marketplace,
             ))
-            .load::<CurrentNFTMarketplaceCollectionOffer>(conn)
+            .load::<CurrentNFTMarketplaceCollectionBid>(conn)
             .map_err(|e| anyhow::anyhow!("Failed to load collection offers: {}", e))?;
     result.insert(
         "current_nft_marketplace_collection_offers".to_string(),

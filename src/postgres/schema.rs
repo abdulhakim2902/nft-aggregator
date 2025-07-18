@@ -40,6 +40,35 @@ diesel::table! {
 }
 
 diesel::table! {
+    bids (id) {
+        id -> Uuid,
+        #[max_length = 66]
+        bidder -> Varchar,
+        #[max_length = 66]
+        canceled_tx_id -> Varchar,
+        collection_id -> Nullable<Uuid>,
+        contract_id -> Nullable<Uuid>,
+        #[max_length = 66]
+        created_tx_id -> Varchar,
+        expires_at -> Timestamptz,
+        market_contract_id -> Uuid,
+        #[max_length = 128]
+        nonce -> Nullable<Varchar>,
+        nft_id -> Nullable<Uuid>,
+        price -> Nullable<Int8>,
+        #[max_length = 128]
+        price_str -> Nullable<Varchar>,
+        #[max_length = 66]
+        receiver -> Nullable<Varchar>,
+        remaining_count -> Nullable<Int8>,
+        #[max_length = 20]
+        status -> Nullable<Varchar>,
+        #[max_length = 20]
+        bid_type -> Nullable<Varchar>,
+    }
+}
+
+diesel::table! {
     collections (id) {
         id -> Uuid,
         #[max_length = 66]
@@ -78,6 +107,8 @@ diesel::table! {
     current_nft_marketplace_collection_offers (collection_offer_id, marketplace) {
         #[max_length = 128]
         collection_offer_id -> Varchar,
+        #[max_length = 128]
+        offer_id -> Nullable<Varchar>,
         #[max_length = 66]
         collection_id -> Nullable<Varchar>,
         #[max_length = 66]
@@ -85,6 +116,8 @@ diesel::table! {
         price -> Int8,
         remaining_token_amount -> Nullable<Int8>,
         is_deleted -> Bool,
+        #[max_length = 66]
+        txn_id -> Varchar,
         marketplace -> Varchar,
         contract_address -> Varchar,
         last_transaction_version -> Int8,
@@ -136,6 +169,8 @@ diesel::table! {
         is_deleted -> Bool,
         contract_address -> Varchar,
         last_transaction_version -> Int8,
+        #[max_length = 66]
+        txn_id -> Varchar,
         last_transaction_timestamp -> Timestamp,
         standard_event_type -> Varchar,
         expiration_time -> Nullable<Timestamp>,
@@ -209,6 +244,7 @@ diesel::table! {
 diesel::allow_tables_to_appear_in_same_query!(
     actions,
     backfill_processor_status,
+    bids,
     collections,
     commissions,
     contracts,

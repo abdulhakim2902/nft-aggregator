@@ -1,13 +1,14 @@
 use crate::{
     models::{
         action::Action,
+        bid::Bid,
         collection::Collection,
         commission::Commission,
         contract::Contract,
         nft::Nft,
         nft_models::{
-            CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
-            CurrentNFTMarketplaceTokenOffer, NftMarketplaceActivity,
+            CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
+            CurrentNFTMarketplaceTokenBid, NftMarketplaceActivity,
         },
     },
     postgres::postgres_utils::{execute_in_chunks, ArcDbPool},
@@ -42,8 +43,8 @@ impl Processable for DBWritingStep {
     type Input = (
         Vec<NftMarketplaceActivity>,
         Vec<CurrentNFTMarketplaceListing>,
-        Vec<CurrentNFTMarketplaceTokenOffer>,
-        Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<CurrentNFTMarketplaceTokenBid>,
+        Vec<CurrentNFTMarketplaceCollectionBid>,
         Vec<Contract>,
         Vec<Collection>,
         Vec<Nft>,
@@ -58,8 +59,8 @@ impl Processable for DBWritingStep {
         input: TransactionContext<(
             Vec<NftMarketplaceActivity>,
             Vec<CurrentNFTMarketplaceListing>,
-            Vec<CurrentNFTMarketplaceTokenOffer>,
-            Vec<CurrentNFTMarketplaceCollectionOffer>,
+            Vec<CurrentNFTMarketplaceTokenBid>,
+            Vec<CurrentNFTMarketplaceCollectionBid>,
             Vec<Contract>,
             Vec<Collection>,
             Vec<Nft>,
@@ -97,6 +98,32 @@ impl Processable for DBWritingStep {
 
         deduped_actions.sort_by(|a, b| a.tx_index.cmp(&b.tx_index));
 
+        let mut deduped_bids: Vec<Bid> = token_offers
+            .into_iter()
+            .map(|offer| {
+                let key = (
+                    offer.token_data_id.clone(),
+                    offer.buyer.clone(),
+                    offer.marketplace.clone(),
+                );
+                (key, offer.into())
+            })
+            .collect::<HashMap<_, _>>()
+            .into_values()
+            .collect();
+
+        let deduped_collection_bids: Vec<Bid> = collection_offers
+            .into_iter()
+            .map(|offer| {
+                let key = (offer.collection_offer_id.clone(), offer.marketplace.clone());
+                (key, offer.into())
+            })
+            .collect::<HashMap<_, _>>()
+            .into_values()
+            .collect();
+
+        deduped_bids.extend(deduped_collection_bids);
+
         let mut deduped_listings: Vec<CurrentNFTMarketplaceListing> = listings
             .into_iter()
             .map(|listing| {
@@ -107,40 +134,6 @@ impl Processable for DBWritingStep {
             .into_values()
             .collect();
         deduped_listings.sort_by(|a, b| a.token_data_id.cmp(&b.token_data_id));
-
-        let mut deduped_token_offers: Vec<CurrentNFTMarketplaceTokenOffer> = token_offers
-            .into_iter()
-            .map(|offer| {
-                let key = (
-                    offer.token_data_id.clone(),
-                    offer.buyer.clone(),
-                    offer.marketplace.clone(),
-                );
-                (key, offer)
-            })
-            .collect::<HashMap<_, _>>()
-            .into_values()
-            .collect();
-
-        deduped_token_offers.sort_by(|a, b: &CurrentNFTMarketplaceTokenOffer| {
-            let key_a = (&a.token_data_id, &a.buyer);
-            let key_b = (&b.token_data_id, &b.buyer);
-            key_a.cmp(&key_b)
-        });
-
-        // Deduplicate collection offers using offer_id
-        let mut deduped_collection_offers: Vec<CurrentNFTMarketplaceCollectionOffer> =
-            collection_offers
-                .into_iter()
-                .map(|offer| {
-                    let key = (offer.collection_offer_id.clone(), offer.marketplace.clone());
-                    (key, offer)
-                })
-                .collect::<HashMap<_, _>>()
-                .into_values()
-                .collect();
-
-        deduped_collection_offers.sort_by(|a, b| a.collection_offer_id.cmp(&b.collection_offer_id));
 
         let deduped_contracts: Vec<Contract> = contracts
             .into_iter()
@@ -179,20 +172,6 @@ impl Processable for DBWritingStep {
             200,
         );
 
-        let token_offers_result = execute_in_chunks(
-            self.db_pool.clone(),
-            insert_current_nft_marketplace_token_offers,
-            &deduped_token_offers,
-            200,
-        );
-
-        let collection_offers_result = execute_in_chunks(
-            self.db_pool.clone(),
-            insert_current_nft_marketplace_collection_offers,
-            &deduped_collection_offers,
-            200,
-        );
-
         let contract_result = execute_in_chunks(
             self.db_pool.clone(),
             insert_contracts,
@@ -217,36 +196,35 @@ impl Processable for DBWritingStep {
         let action_result =
             execute_in_chunks(self.db_pool.clone(), insert_actions, &deduped_actions, 200);
 
+        let bid_result = execute_in_chunks(self.db_pool.clone(), insert_bids, &deduped_bids, 200);
+
         let nft_result = execute_in_chunks(self.db_pool.clone(), insert_nfts, &deduped_nfts, 200);
 
         let (
+            action_result,
+            bid_result,
             listings_result,
-            token_offers_result,
-            collection_offers_result,
             contract_result,
             collection_result,
             nft_result,
-            action_result,
             commission_result,
         ) = tokio::join!(
+            action_result,
+            bid_result,
             listings_result,
-            token_offers_result,
-            collection_offers_result,
             contract_result,
             collection_result,
             nft_result,
-            action_result,
             commission_result,
         );
 
         for result in [
+            action_result,
+            bid_result,
             listings_result,
-            token_offers_result,
-            collection_offers_result,
             contract_result,
             collection_result,
             nft_result,
-            action_result,
             commission_result,
         ] {
             match result {
@@ -300,33 +278,8 @@ pub fn insert_current_nft_marketplace_listings(
         .filter(last_transaction_version.le(excluded(last_transaction_version)))
 }
 
-pub fn insert_current_nft_marketplace_token_offers(
-    items_to_insert: Vec<CurrentNFTMarketplaceTokenOffer>,
-) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
-    use crate::schema::current_nft_marketplace_token_offers::dsl::*;
-    diesel::insert_into(schema::current_nft_marketplace_token_offers::table)
-        .values(items_to_insert)
-        .on_conflict((token_data_id, buyer, marketplace))
-        .do_update()
-        .set((
-            offer_id.eq(excluded(offer_id)),
-            collection_id.eq(excluded(collection_id)),
-            buyer.eq(excluded(buyer)),
-            price.eq(excluded(price)),
-            token_amount.eq(excluded(token_amount)),
-            token_name.eq(excluded(token_name)),
-            is_deleted.eq(excluded(is_deleted)),
-            contract_address.eq(excluded(contract_address)),
-            last_transaction_version.eq(excluded(last_transaction_version)),
-            last_transaction_timestamp.eq(excluded(last_transaction_timestamp)),
-            standard_event_type.eq(excluded(standard_event_type)),
-            bid_key.eq(excluded(bid_key)),
-        ))
-        .filter(last_transaction_version.le(excluded(last_transaction_version)))
-}
-
 pub fn insert_current_nft_marketplace_collection_offers(
-    items_to_insert: Vec<CurrentNFTMarketplaceCollectionOffer>,
+    items_to_insert: Vec<CurrentNFTMarketplaceCollectionBid>,
 ) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
     use crate::schema::current_nft_marketplace_collection_offers::dsl::*;
 
@@ -400,6 +353,17 @@ pub fn insert_nfts(
         ))
 }
 
+pub fn insert_commissions(
+    items_to_insert: Vec<Commission>,
+) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
+    use crate::schema::commissions::dsl::*;
+
+    diesel::insert_into(schema::commissions::table)
+        .values(items_to_insert)
+        .on_conflict(contract_id)
+        .do_nothing()
+}
+
 pub fn insert_actions(
     items_to_insert: Vec<Action>,
 ) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
@@ -411,13 +375,13 @@ pub fn insert_actions(
         .do_nothing()
 }
 
-pub fn insert_commissions(
-    items_to_insert: Vec<Commission>,
+pub fn insert_bids(
+    items_to_insert: Vec<Bid>,
 ) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
-    use crate::schema::commissions::dsl::*;
+    use crate::schema::bids::dsl::*;
 
-    diesel::insert_into(schema::commissions::table)
+    diesel::insert_into(schema::bids::table)
         .values(items_to_insert)
-        .on_conflict(contract_id)
+        .on_conflict(id)
         .do_nothing()
 }

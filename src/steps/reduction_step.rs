@@ -7,8 +7,8 @@ use crate::{
         contract::Contract,
         nft::Nft,
         nft_models::{
-            CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
-            CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
+            CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
+            CurrentNFTMarketplaceTokenBid, MarketplaceField, MarketplaceModel,
             NftMarketplaceActivity,
         },
     },
@@ -25,8 +25,8 @@ use std::{collections::HashMap, mem, str::FromStr};
 pub struct NFTAccumulator {
     activities: Vec<NftMarketplaceActivity>,
     listings: HashMap<String, CurrentNFTMarketplaceListing>,
-    token_offers: HashMap<String, CurrentNFTMarketplaceTokenOffer>,
-    collection_offers: HashMap<String, CurrentNFTMarketplaceCollectionOffer>,
+    token_offers: HashMap<String, CurrentNFTMarketplaceTokenBid>,
+    collection_offers: HashMap<String, CurrentNFTMarketplaceCollectionBid>,
 }
 
 impl NFTAccumulator {
@@ -35,7 +35,7 @@ impl NFTAccumulator {
         self.listings.insert(key, listing);
     }
 
-    pub fn fold_token_offer(&mut self, offer: CurrentNFTMarketplaceTokenOffer) {
+    pub fn fold_token_offer(&mut self, offer: CurrentNFTMarketplaceTokenBid) {
         let key = format!(
             "{}::{}::{}",
             offer.marketplace, offer.token_data_id, offer.buyer
@@ -43,7 +43,7 @@ impl NFTAccumulator {
         self.token_offers.insert(key, offer);
     }
 
-    pub fn fold_collection_offer(&mut self, offer: CurrentNFTMarketplaceCollectionOffer) {
+    pub fn fold_collection_offer(&mut self, offer: CurrentNFTMarketplaceCollectionBid) {
         let key = format!("{}::{}", offer.marketplace, offer.collection_offer_id);
         self.collection_offers.insert(key, offer);
     }
@@ -57,8 +57,8 @@ impl NFTAccumulator {
     ) -> (
         Vec<NftMarketplaceActivity>,
         Vec<CurrentNFTMarketplaceListing>,
-        Vec<CurrentNFTMarketplaceTokenOffer>,
-        Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<CurrentNFTMarketplaceTokenBid>,
+        Vec<CurrentNFTMarketplaceCollectionBid>,
     ) {
         (
             mem::take(&mut self.activities),
@@ -88,8 +88,8 @@ impl NFTReductionStep {
 pub type Tables = (
     Vec<NftMarketplaceActivity>,
     Vec<CurrentNFTMarketplaceListing>,
-    Vec<CurrentNFTMarketplaceTokenOffer>,
-    Vec<CurrentNFTMarketplaceCollectionOffer>,
+    Vec<CurrentNFTMarketplaceTokenBid>,
+    Vec<CurrentNFTMarketplaceCollectionBid>,
 );
 
 #[async_trait::async_trait]
@@ -97,8 +97,8 @@ impl Processable for NFTReductionStep {
     type Input = (
         HashMap<i64, Vec<NftMarketplaceActivity>>,
         Vec<CurrentNFTMarketplaceListing>,
-        Vec<CurrentNFTMarketplaceTokenOffer>,
-        Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<CurrentNFTMarketplaceTokenBid>,
+        Vec<CurrentNFTMarketplaceCollectionBid>,
         Vec<Contract>,
         Vec<Collection>,
         Vec<Nft>,
@@ -109,8 +109,8 @@ impl Processable for NFTReductionStep {
     type Output = (
         Vec<NftMarketplaceActivity>,
         Vec<CurrentNFTMarketplaceListing>,
-        Vec<CurrentNFTMarketplaceTokenOffer>,
-        Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<CurrentNFTMarketplaceTokenBid>,
+        Vec<CurrentNFTMarketplaceCollectionBid>,
         Vec<Contract>,
         Vec<Collection>,
         Vec<Nft>,
@@ -236,12 +236,7 @@ fn merge_partial_update<T: MarketplaceModel>(
                 if let Some(matching_activity) = activities_vec.iter_mut().find(|activity| {
                     // we should first check if it's one of collection offer types
                     let standard_event_type = model.get_standard_event_type();
-                    if standard_event_type == MarketplaceEventType::CollectionBid.to_string()
-                        || standard_event_type
-                            == MarketplaceEventType::CancelCollectionBid.to_string()
-                        || standard_event_type
-                            == MarketplaceEventType::AcceptCollectionBid.to_string()
-                    {
+                    if standard_event_type == MarketplaceEventType::CollectionBid.to_string() {
                         // Match on collection_offer_id for collection offers
                         model
                             .get_field(MarketplaceField::CollectionOfferId)

@@ -1,6 +1,6 @@
 -- Your SQL goes here
 CREATE TABLE IF NOT EXISTS commissions (
-  id uuid DEFAULT gen_random_uuid(),
+  id uuid NOT NULL,
   royalty NUMERIC(10, 5),
   contract_id uuid UNIQUE NOT NULL,
   -- Add marketname

@@ -1,6 +1,6 @@
 -- Your SQL goes here
 CREATE TABLE IF NOT EXISTS actions (
-  id uuid DEFAULT gen_random_uuid(),
+  id uuid NOT NULL,
   tx_type VARCHAR(30) NOT NULL,
   tx_index BIGINT NOT NULL,
   tx_id VARCHAR(66) NOT NULL,

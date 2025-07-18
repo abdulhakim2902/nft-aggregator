@@ -17,15 +17,15 @@ pub struct Action {
     pub id: Option<Uuid>,
     pub tx_type: Option<String>,
     pub tx_index: Option<i64>,
-    pub tx_id: Option<String>, // 1
+    pub tx_id: Option<String>,
     pub sender: Option<String>,
     pub receiver: Option<String>,
     pub price: Option<i64>,
     pub nft_id: Option<Uuid>,
     pub collection_id: Option<Uuid>,
     pub block_time: Option<NaiveDateTime>,
-    pub block_height: Option<i64>, // 4
-    pub contract_id: Option<Uuid>, // 5
+    pub block_height: Option<i64>,
+    pub contract_id: Option<Uuid>,
     pub market_name: Option<String>,
     pub market_contract_id: Option<Uuid>,
     pub usd_price: Option<BigDecimal>, // 6

@@ -1,6 +1,6 @@
 use crate::models::nft_models::{
-    CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
-    CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
+    CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
+    CurrentNFTMarketplaceTokenBid, MarketplaceField, MarketplaceModel,
     CURRENT_NFT_MARKETPLACE_COLLECTION_OFFERS_TABLE_NAME,
     CURRENT_NFT_MARKETPLACE_LISTINGS_TABLE_NAME, CURRENT_NFT_MARKETPLACE_TOKEN_OFFERS_TABLE_NAME,
     NFT_MARKETPLACE_ACTIVITIES_TABLE_NAME,
@@ -12,32 +12,32 @@ pub mod resource_remapper;
 #[derive(Debug)]
 enum SecondaryModel {
     Listing(CurrentNFTMarketplaceListing),
-    TokenOffer(CurrentNFTMarketplaceTokenOffer),
-    CollectionOffer(CurrentNFTMarketplaceCollectionOffer),
+    TokenBid(CurrentNFTMarketplaceTokenBid),
+    CollectionBid(CurrentNFTMarketplaceCollectionBid),
 }
 
 impl MarketplaceModel for SecondaryModel {
     fn set_field(&mut self, column: MarketplaceField, value: String) {
         match self {
             SecondaryModel::Listing(l) => l.set_field(column, value),
-            SecondaryModel::TokenOffer(t) => t.set_field(column, value),
-            SecondaryModel::CollectionOffer(c) => c.set_field(column, value),
+            SecondaryModel::TokenBid(t) => t.set_field(column, value),
+            SecondaryModel::CollectionBid(c) => c.set_field(column, value),
         }
     }
 
     fn is_valid(&self) -> bool {
         match self {
             SecondaryModel::Listing(l) => l.is_valid(),
-            SecondaryModel::TokenOffer(t) => t.is_valid(),
-            SecondaryModel::CollectionOffer(c) => c.is_valid(),
+            SecondaryModel::TokenBid(t) => t.is_valid(),
+            SecondaryModel::CollectionBid(c) => c.is_valid(),
         }
     }
 
     fn table_name(&self) -> &'static str {
         match self {
             SecondaryModel::Listing(_) => CURRENT_NFT_MARKETPLACE_LISTINGS_TABLE_NAME,
-            SecondaryModel::TokenOffer(_) => CURRENT_NFT_MARKETPLACE_TOKEN_OFFERS_TABLE_NAME,
-            SecondaryModel::CollectionOffer(_) => {
+            SecondaryModel::TokenBid(_) => CURRENT_NFT_MARKETPLACE_TOKEN_OFFERS_TABLE_NAME,
+            SecondaryModel::CollectionBid(_) => {
                 CURRENT_NFT_MARKETPLACE_COLLECTION_OFFERS_TABLE_NAME
             },
         }

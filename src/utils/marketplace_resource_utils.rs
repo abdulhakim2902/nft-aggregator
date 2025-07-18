@@ -44,22 +44,22 @@ pub struct FixedPriceListing {
 }
 
 #[derive(Debug, Clone)]
-pub enum TokenOffer {
+pub enum TokenBid {
     V1(TokenOfferV1),
     V2(TokenOfferV2),
 }
 
-impl TokenOffer {
+impl TokenBid {
     pub fn as_v1(&self) -> Option<&TokenOfferV1> {
         match self {
-            TokenOffer::V1(v1) => Some(v1),
+            TokenBid::V1(v1) => Some(v1),
             _ => None,
         }
     }
 
     pub fn as_v2(&self) -> Option<&TokenOfferV2> {
         match self {
-            TokenOffer::V2(v2) => Some(v2),
+            TokenBid::V2(v2) => Some(v2),
             _ => None,
         }
     }
@@ -76,22 +76,22 @@ pub struct TokenOfferV2 {
 }
 
 #[derive(Debug, Clone)]
-pub enum CollectionOffer {
+pub enum CollectionBid {
     V1(CollectionOfferV1),
     V2(CollectionOfferV2),
 }
 
-impl CollectionOffer {
+impl CollectionBid {
     pub fn as_v1(&self) -> Option<&CollectionOfferV1> {
         match self {
-            CollectionOffer::V1(v1) => Some(v1),
+            CollectionBid::V1(v1) => Some(v1),
             _ => None,
         }
     }
 
     pub fn as_v2(&self) -> Option<&CollectionOfferV2> {
         match self {
-            CollectionOffer::V2(v2) => Some(v2),
+            CollectionBid::V2(v2) => Some(v2),
             _ => None,
         }
     }

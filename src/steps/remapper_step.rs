@@ -8,8 +8,8 @@ use crate::{
         contract::Contract,
         nft::Nft,
         nft_models::{
-            CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
-            CurrentNFTMarketplaceTokenOffer, NftMarketplaceActivity,
+            CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
+            CurrentNFTMarketplaceTokenBid, NftMarketplaceActivity,
         },
     },
     steps::remappers::event_remapper::EventRemapper,
@@ -55,8 +55,8 @@ impl Processable for ProcessStep {
     type Output = (
         HashMap<i64, Vec<NftMarketplaceActivity>>,
         Vec<CurrentNFTMarketplaceListing>,
-        Vec<CurrentNFTMarketplaceTokenOffer>,
-        Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<CurrentNFTMarketplaceTokenBid>,
+        Vec<CurrentNFTMarketplaceCollectionBid>,
         Vec<Contract>,
         Vec<Collection>,
         Vec<Nft>,
@@ -74,8 +74,8 @@ impl Processable for ProcessStep {
             TransactionContext<(
                 HashMap<i64, Vec<NftMarketplaceActivity>>,
                 Vec<CurrentNFTMarketplaceListing>,
-                Vec<CurrentNFTMarketplaceTokenOffer>,
-                Vec<CurrentNFTMarketplaceCollectionOffer>,
+                Vec<CurrentNFTMarketplaceTokenBid>,
+                Vec<CurrentNFTMarketplaceCollectionBid>,
                 Vec<Contract>,
                 Vec<Collection>,
                 Vec<Nft>,
@@ -95,8 +95,8 @@ impl Processable for ProcessStep {
                 let (
                     activities,
                     listings,
-                    token_offers,
-                    collection_offers,
+                    token_bids,
+                    collection_bids,
                     contracts,
                     collections,
                     nfts,
@@ -109,8 +109,8 @@ impl Processable for ProcessStep {
                 Ok((
                     activities,
                     listings,
-                    token_offers,
-                    collection_offers,
+                    token_bids,
+                    collection_bids,
                     resource_updates,
                     contracts,
                     collections,
@@ -127,8 +127,8 @@ impl Processable for ProcessStep {
         let (
             mut all_activities,
             mut all_listings,
-            mut all_token_offers,
-            mut all_collection_offers,
+            mut all_token_bids,
+            mut all_collection_bids,
             mut all_contracts,
             mut all_collections,
             mut all_nfts,
@@ -151,8 +151,8 @@ impl Processable for ProcessStep {
         for (
             activities,
             listings,
-            token_offers,
-            collection_offers,
+            token_bids,
+            collection_bids,
             resource_updates,
             contracts,
             collections,
@@ -163,8 +163,8 @@ impl Processable for ProcessStep {
         {
             all_activities.extend(activities);
             all_listings.extend(listings);
-            all_token_offers.extend(token_offers);
-            all_collection_offers.extend(collection_offers);
+            all_token_bids.extend(token_bids);
+            all_collection_bids.extend(collection_bids);
             all_contracts.extend(contracts);
             all_collections.extend(collections);
             all_nfts.extend(nfts);
@@ -193,8 +193,8 @@ impl Processable for ProcessStep {
             data: (
                 activities_map,
                 all_listings,
-                all_token_offers,
-                all_collection_offers,
+                all_token_bids,
+                all_collection_bids,
                 all_contracts,
                 all_collections,
                 all_nfts,

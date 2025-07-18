@@ -9,8 +9,8 @@ use crate::{
         contract::Contract,
         nft::Nft,
         nft_models::{
-            CurrentNFTMarketplaceCollectionOffer, CurrentNFTMarketplaceListing,
-            CurrentNFTMarketplaceTokenOffer, MarketplaceField, MarketplaceModel,
+            CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
+            CurrentNFTMarketplaceTokenBid, MarketplaceField, MarketplaceModel,
             NftMarketplaceActivity,
         },
         resources::parse_resource_data,
@@ -80,8 +80,8 @@ impl EventRemapper {
     ) -> Result<(
         Vec<NftMarketplaceActivity>,
         Vec<CurrentNFTMarketplaceListing>,
-        Vec<CurrentNFTMarketplaceTokenOffer>,
-        Vec<CurrentNFTMarketplaceCollectionOffer>,
+        Vec<CurrentNFTMarketplaceTokenBid>,
+        Vec<CurrentNFTMarketplaceCollectionBid>,
         Vec<Contract>,
         Vec<Collection>,
         Vec<Nft>,
@@ -104,8 +104,8 @@ impl EventRemapper {
         }
 
         let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
-        let mut current_token_offers: Vec<CurrentNFTMarketplaceTokenOffer> = Vec::new();
-        let mut current_collection_offers: Vec<CurrentNFTMarketplaceCollectionOffer> = Vec::new();
+        let mut current_token_offers: Vec<CurrentNFTMarketplaceTokenBid> = Vec::new();
+        let mut current_collection_offers: Vec<CurrentNFTMarketplaceCollectionBid> = Vec::new();
         let mut current_listings: Vec<CurrentNFTMarketplaceListing> = Vec::new();
 
         let mut collection_data: HashMap<String, Collection> = HashMap::new();
@@ -514,10 +514,11 @@ impl EventRemapper {
                         Some(MarketplaceEventType::SoloBid) => {
                             activity.standard_event_type =
                                 MarketplaceEventType::SoloBid.to_string();
-                            Some(SecondaryModel::TokenOffer(
-                                CurrentNFTMarketplaceTokenOffer::build_default(
+                            Some(SecondaryModel::TokenBid(
+                                CurrentNFTMarketplaceTokenBid::build_default(
                                     self.marketplace_name.clone(),
                                     &event,
+                                    transaction_id.clone(),
                                     false,
                                     MarketplaceEventType::SoloBid.to_string(),
                                 ),
@@ -526,34 +527,21 @@ impl EventRemapper {
                         Some(MarketplaceEventType::UnlistBid) => {
                             activity.standard_event_type =
                                 MarketplaceEventType::UnlistBid.to_string();
-                            Some(SecondaryModel::TokenOffer(
-                                CurrentNFTMarketplaceTokenOffer::build_default(
-                                    self.marketplace_name.clone(),
-                                    &event,
-                                    true,
-                                    MarketplaceEventType::UnlistBid.to_string(),
-                                ),
-                            ))
+                            None
                         },
                         Some(MarketplaceEventType::AcceptBid) => {
                             activity.standard_event_type =
                                 MarketplaceEventType::AcceptBid.to_string();
-                            Some(SecondaryModel::TokenOffer(
-                                CurrentNFTMarketplaceTokenOffer::build_default(
-                                    self.marketplace_name.clone(),
-                                    &event,
-                                    true,
-                                    MarketplaceEventType::AcceptBid.to_string(),
-                                ),
-                            ))
+                            None
                         },
                         Some(MarketplaceEventType::CollectionBid) => {
                             activity.standard_event_type =
                                 MarketplaceEventType::CollectionBid.to_string();
-                            Some(SecondaryModel::CollectionOffer(
-                                CurrentNFTMarketplaceCollectionOffer::build_default(
+                            Some(SecondaryModel::CollectionBid(
+                                CurrentNFTMarketplaceCollectionBid::build_default(
                                     self.marketplace_name.clone(),
                                     &event,
+                                    transaction_id.clone(),
                                     false,
                                     MarketplaceEventType::CollectionBid.to_string(),
                                 ),
@@ -562,26 +550,12 @@ impl EventRemapper {
                         Some(MarketplaceEventType::CancelCollectionBid) => {
                             activity.standard_event_type =
                                 MarketplaceEventType::CancelCollectionBid.to_string();
-                            Some(SecondaryModel::CollectionOffer(
-                                CurrentNFTMarketplaceCollectionOffer::build_default(
-                                    self.marketplace_name.clone(),
-                                    &event,
-                                    true,
-                                    MarketplaceEventType::CancelCollectionBid.to_string(),
-                                ),
-                            ))
+                            None
                         },
                         Some(MarketplaceEventType::AcceptCollectionBid) => {
                             activity.standard_event_type =
                                 MarketplaceEventType::AcceptCollectionBid.to_string();
-                            Some(SecondaryModel::CollectionOffer(
-                                CurrentNFTMarketplaceCollectionOffer::build_default(
-                                    self.marketplace_name.clone(),
-                                    &event,
-                                    true,
-                                    MarketplaceEventType::AcceptCollectionBid.to_string(),
-                                ),
-                            ))
+                            None
                         },
                         Some(MarketplaceEventType::Unknown) => {
                             warn!("Skipping unrecognized event type '{}'", event_type_str);
@@ -678,18 +652,18 @@ impl EventRemapper {
                                     &token_name,
                                 );
                             },
-                            SecondaryModel::TokenOffer(token_offer) => {
+                            SecondaryModel::TokenBid(token_bid) => {
                                 self.generate_and_set_ids(
-                                    token_offer,
+                                    token_bid,
                                     &mut activity,
                                     &creator_address,
                                     &collection_name,
                                     &token_name,
                                 );
                             },
-                            SecondaryModel::CollectionOffer(collection_offer) => {
+                            SecondaryModel::CollectionBid(collection_bid) => {
                                 self.generate_and_set_ids(
-                                    collection_offer,
+                                    collection_bid,
                                     &mut activity,
                                     &creator_address,
                                     &collection_name,
@@ -697,14 +671,14 @@ impl EventRemapper {
                                 );
 
                                 // Handle collection_offer_id separately since it's specific to collection offers
-                                if collection_offer.collection_offer_id.is_empty() {
+                                if collection_bid.collection_offer_id.is_empty() {
                                     if let Some(generated_collection_offer_id) =
                                         generate_collection_offer_id(
                                             creator_address,
                                             activity.buyer.clone(),
                                         )
                                     {
-                                        collection_offer.collection_offer_id =
+                                        collection_bid.collection_offer_id =
                                             generated_collection_offer_id.clone();
                                         activity.set_field(
                                             MarketplaceField::CollectionOfferId,
@@ -724,11 +698,11 @@ impl EventRemapper {
                                     activities.push(activity);
                                     current_listings.push(listing);
                                 },
-                                SecondaryModel::TokenOffer(token_offer) => {
+                                SecondaryModel::TokenBid(token_offer) => {
                                     activities.push(activity);
                                     current_token_offers.push(token_offer);
                                 },
-                                SecondaryModel::CollectionOffer(collection_offer) => {
+                                SecondaryModel::CollectionBid(collection_offer) => {
                                     activities.push(activity);
                                     current_collection_offers.push(collection_offer);
                                 },
@@ -892,7 +866,7 @@ fn generate_collection_offer_id(
             Some(standardize_address(&hash_str))
         },
         _ => {
-            debug!("Missing required fields for collection offer id generation - skipping");
+            debug!("Missing required fields for collection bid id generation - skipping");
             None
         },
     }
@@ -1413,7 +1387,7 @@ mod tests {
         // Verify results
         assert_eq!(activities.len(), 1, "Should have one activity");
         assert_eq!(listings.len(), 0, "Should have no listings");
-        assert_eq!(token_offers.len(), 1, "Should have one token offer");
+        assert_eq!(token_offers.len(), 1, "Should have one token bid");
         assert_eq!(
             collection_offers.len(),
             0,
@@ -1440,7 +1414,7 @@ mod tests {
         assert_eq!(activity.marketplace, "test_marketplace");
         assert_eq!(activity.standard_event_type, "place_token_offer");
 
-        // Verify token offer details
+        // Verify token bid details
         let token_offer = &token_offers[0];
         let expected_token_data_id = build_test_token_data_id(
             "0xee814d743d2c3b4b1b8b30f3e0c84c7017df3154bda84c31958785f1d5b70e61",
@@ -1464,150 +1438,6 @@ mod tests {
         );
         assert_eq!(token_offer.marketplace, "test_marketplace");
         assert!(!token_offer.is_deleted);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_token_offer_filled_event() -> Result<()> {
-        let event_type = "0x584b50b999c78ade62f8359c91b5165ff390338d45f8e55969a04e65d76258c9::events::TokenOfferFilledEvent";
-        let event_data = serde_json::json!({
-            "commission": "51000000",
-            "price": "3400000000",
-            "purchaser": "0x22113f16f9b7c6761ef14df757c016b8736a9023e8881cd5e11579b0b98ef562",
-            "royalties": "142800000",
-            "seller": "0xc60f124dc24f4ea97232bc5ead5f37252b7cbee47f48ef05932998050c414d14",
-            "token_metadata": {
-                "collection": {
-                    "vec": [
-                        {
-                            "inner": "0xa2485c3b392d211770ed161e73a1097d21016c7dd41f53592434380b2aa14cba"
-                        }
-                    ]
-                },
-                "collection_name": "The Loonies",
-                "creator_address": "0xf54f8f7ffc2b779d81b721b3d42fe9a53f96e1d3459a8001934307783d493725",
-                "property_version": {
-                    "vec": []
-                },
-                "token": {
-                    "vec": [
-                        {
-                            "inner": "0xc821b5c1712fca97553c85830b91dc212cd2fcdd2a2490b65f945ed901d9f126"
-                        }
-                    ]
-                },
-                "token_name": "The Loonies #399"
-            },
-            "token_offer": "0x9d14c489b6f56ac55e8707022400c23bb83bd0b0cd486c862defccf6241a219e"
-        });
-
-        // Create field mappings
-        let mut fields = HashMap::new();
-        fields.insert("$.token_metadata.token.vec[0].inner".to_string(), vec![
-            create_db_column("nft_marketplace_activities", "token_data_id"),
-            create_db_column("current_nft_marketplace_token_offers", "token_data_id"),
-        ]);
-        fields.insert("$.token_metadata.token_name".to_string(), vec![
-            create_db_column("nft_marketplace_activities", "token_name"),
-            create_db_column("current_nft_marketplace_token_offers", "token_name"),
-        ]);
-        fields.insert("$.token_metadata.creator_address".to_string(), vec![
-            create_db_column("nft_marketplace_activities", "creator_address"),
-            create_db_column("current_nft_marketplace_token_offers", "creator_address"),
-        ]);
-        fields.insert("$.token_metadata.collection_name".to_string(), vec![
-            create_db_column("nft_marketplace_activities", "collection_name"),
-            create_db_column("current_nft_marketplace_token_offers", "collection_name"),
-        ]);
-        fields.insert("$.price".to_string(), vec![
-            create_db_column("nft_marketplace_activities", "price"),
-            create_db_column("current_nft_marketplace_token_offers", "price"),
-        ]);
-        fields.insert("$.seller".to_string(), vec![
-            create_db_column("nft_marketplace_activities", "seller"),
-            create_db_column("current_nft_marketplace_token_offers", "seller"),
-        ]);
-        fields.insert("$.purchaser".to_string(), vec![
-            create_db_column("nft_marketplace_activities", "buyer"),
-            create_db_column("current_nft_marketplace_token_offers", "buyer"),
-        ]);
-        fields.insert("$.token_offer".to_string(), vec![
-            create_db_column("nft_marketplace_activities", "offer_id"),
-            create_db_column("current_nft_marketplace_token_offers", "offer_id"),
-        ]);
-
-        let config = create_marketplace_config(event_type, fields, MarketplaceEventType::AcceptBid);
-
-        let remapper = EventRemapper::new(&config)?;
-        let transaction = create_transaction(event_type, event_data);
-        let (
-            activities,
-            listings,
-            token_offers,
-            collection_offers,
-            _contracts,
-            _collections,
-            _nfts,
-            _actions,
-            _commissions,
-        ) = remapper.remap_events(transaction)?;
-
-        // Verify results
-        assert_eq!(activities.len(), 1, "Should have one activity");
-        assert_eq!(listings.len(), 0, "Should have no listings");
-        assert_eq!(token_offers.len(), 1, "Should have one token offer");
-        assert_eq!(
-            collection_offers.len(),
-            0,
-            "Should have no collection offers"
-        );
-
-        // Verify activity details
-        let activity = &activities[0];
-        assert_eq!(activity.price, 3400000000);
-        assert_eq!(
-            activity.buyer.as_deref().unwrap(),
-            "0x22113f16f9b7c6761ef14df757c016b8736a9023e8881cd5e11579b0b98ef562"
-        );
-        assert_eq!(
-            activity.seller.as_deref().unwrap(),
-            "0xc60f124dc24f4ea97232bc5ead5f37252b7cbee47f48ef05932998050c414d14"
-        );
-        assert_eq!(
-            activity.creator_address.as_deref().unwrap(),
-            "0xf54f8f7ffc2b779d81b721b3d42fe9a53f96e1d3459a8001934307783d493725"
-        );
-        assert_eq!(activity.collection_name.as_deref().unwrap(), "The Loonies");
-        assert_eq!(activity.token_name.as_deref().unwrap(), "The Loonies #399");
-        assert_eq!(
-            activity.token_data_id.as_deref().unwrap(),
-            "0xc821b5c1712fca97553c85830b91dc212cd2fcdd2a2490b65f945ed901d9f126"
-        );
-        assert_eq!(
-            activity.offer_id.as_deref().unwrap(),
-            "0x9d14c489b6f56ac55e8707022400c23bb83bd0b0cd486c862defccf6241a219e"
-        );
-        assert_eq!(activity.marketplace, "test_marketplace");
-        assert_eq!(activity.standard_event_type, "fill_token_offer");
-
-        // Verify token offer details
-        let token_offer = &token_offers[0];
-        assert_eq!(token_offer.price, 3400000000);
-        assert_eq!(
-            token_offer.buyer,
-            "0x22113f16f9b7c6761ef14df757c016b8736a9023e8881cd5e11579b0b98ef562"
-        );
-        assert_eq!(
-            token_offer.token_data_id,
-            "0xc821b5c1712fca97553c85830b91dc212cd2fcdd2a2490b65f945ed901d9f126"
-        );
-        assert_eq!(
-            token_offer.offer_id.as_deref().unwrap(),
-            "0x9d14c489b6f56ac55e8707022400c23bb83bd0b0cd486c862defccf6241a219e"
-        );
-        assert_eq!(token_offer.marketplace, "test_marketplace");
-        assert!(token_offer.is_deleted);
 
         Ok(())
     }

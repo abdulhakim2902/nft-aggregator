@@ -1,5 +1,5 @@
 use aptos_indexer_processor_sdk::utils::convert::{deserialize_from_string, standardize_address};
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, Zero};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -53,7 +53,11 @@ impl CreateTokenDataEventData {
     }
 
     pub fn get_royalty(&self) -> BigDecimal {
-        &self.royalty_points_numerator / &self.royalty_points_denominator * 100
+        if &self.royalty_points_denominator > &BigDecimal::zero() {
+            &self.royalty_points_numerator / &self.royalty_points_denominator * 100
+        } else {
+            BigDecimal::zero()
+        }
     }
 }
 
