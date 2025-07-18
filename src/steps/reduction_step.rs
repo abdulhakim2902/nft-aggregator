@@ -236,11 +236,11 @@ fn merge_partial_update<T: MarketplaceModel>(
                 if let Some(matching_activity) = activities_vec.iter_mut().find(|activity| {
                     // we should first check if it's one of collection offer types
                     let standard_event_type = model.get_standard_event_type();
-                    if standard_event_type == MarketplaceEventType::PlaceCollectionOffer.to_string()
+                    if standard_event_type == MarketplaceEventType::CollectionBid.to_string()
                         || standard_event_type
-                            == MarketplaceEventType::CancelCollectionOffer.to_string()
+                            == MarketplaceEventType::CancelCollectionBid.to_string()
                         || standard_event_type
-                            == MarketplaceEventType::FillCollectionOffer.to_string()
+                            == MarketplaceEventType::AcceptCollectionBid.to_string()
                     {
                         // Match on collection_offer_id for collection offers
                         model

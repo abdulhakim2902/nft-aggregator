@@ -1,9 +1,10 @@
 use crate::{
-    models::EventModel,
+    models::{action::Action, EventModel},
     schema::{
         current_nft_marketplace_collection_offers, current_nft_marketplace_listings,
         current_nft_marketplace_token_offers, nft_marketplace_activities,
     },
+    utils::generate_uuid_from_str,
 };
 use aptos_indexer_processor_sdk::aptos_indexer_transaction_stream::utils::time::parse_timestamp_secs;
 use chrono::NaiveDateTime;
@@ -11,6 +12,7 @@ use diesel::prelude::*;
 use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
+use uuid::Uuid;
 
 pub const DEFAULT_SELLER: &str = "unknown";
 pub const DEFAULT_BUYER: &str = "unknown";
@@ -31,6 +33,7 @@ pub const CURRENT_NFT_MARKETPLACE_COLLECTION_OFFERS_TABLE_NAME: &str =
 #[diesel(primary_key(txn_version, index, marketplace))]
 #[diesel(table_name = nft_marketplace_activities)]
 pub struct NftMarketplaceActivity {
+    pub txn_id: String,
     pub txn_version: i64,
     pub index: i64,
     pub raw_event_type: String,
@@ -51,8 +54,67 @@ pub struct NftMarketplaceActivity {
     pub marketplace: String,
     pub contract_address: String,
     pub block_timestamp: NaiveDateTime,
+    pub block_height: i64,
     pub expiration_time: Option<NaiveDateTime>,
     pub bid_key: Option<i64>,
+}
+
+impl From<NftMarketplaceActivity> for Action {
+    fn from(value: NftMarketplaceActivity) -> Self {
+        Self {
+            id: Some(value.get_id()),
+            tx_index: Some(value.get_tx_index()),
+            collection_id: value.get_collection_id(),
+            contract_id: value.get_contract_id(),
+            nft_id: value.get_nft_id(),
+            market_contract_id: Some(value.get_market_contract_id()),
+            tx_id: Some(value.txn_id),
+            tx_type: Some(value.standard_event_type),
+            sender: value.seller,
+            receiver: value.buyer,
+            price: Some(value.price),
+            block_time: Some(value.block_timestamp),
+            market_name: Some(value.marketplace),
+            block_height: Some(value.block_height),
+            ..Default::default()
+        }
+    }
+}
+
+impl NftMarketplaceActivity {
+    pub fn get_id(&self) -> Uuid {
+        generate_uuid_from_str(&format!(
+            "{}::{}",
+            self.get_tx_index().to_string(),
+            self.marketplace
+        ))
+    }
+
+    pub fn get_tx_index(&self) -> i64 {
+        self.txn_version * 100_000 + self.index
+    }
+
+    pub fn get_collection_id(&self) -> Option<Uuid> {
+        self.collection_id
+            .clone()
+            .map(|e| generate_uuid_from_str(&e))
+    }
+
+    pub fn get_nft_id(&self) -> Option<Uuid> {
+        self.token_data_id
+            .clone()
+            .map(|e| generate_uuid_from_str(&e))
+    }
+
+    pub fn get_contract_id(&self) -> Option<Uuid> {
+        self.collection_id
+            .clone()
+            .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
+    }
+
+    pub fn get_market_contract_id(&self) -> Uuid {
+        generate_uuid_from_str(&format!("{}::{}", self.contract_address, self.marketplace))
+    }
 }
 
 impl MarketplaceModel for NftMarketplaceActivity {

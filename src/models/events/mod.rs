@@ -147,18 +147,11 @@ impl From<EventData<MintData>> for Nft {
 impl From<EventData<MintData>> for Action {
     fn from(value: EventData<MintData>) -> Self {
         Self {
-            id: None,
             tx_type: Some("mint".to_string()),
-            tx_id: None,
-            tx_index: None,
-            price: None,
-            sender: None,
-            receiver: None,
             nft_id: Some(value.data.get_token_id()),
             collection_id: Some(value.data.get_collection_id()),
             contract_id: Some(value.data.get_contract_id()),
-            block_time: None,
-            block_height: None,
+            ..Default::default()
         }
     }
 }
@@ -206,18 +199,11 @@ impl From<EventData<BurnData>> for Nft {
 impl From<EventData<BurnData>> for Action {
     fn from(value: EventData<BurnData>) -> Self {
         Self {
-            id: None,
             tx_type: Some("burn".to_string()),
-            tx_id: None,
-            tx_index: None,
-            price: None,
-            sender: None,
-            receiver: None,
             nft_id: Some(value.data.get_token_id()),
             collection_id: Some(value.data.get_collection_id()),
             contract_id: Some(value.data.get_contract_id()),
-            block_time: None,
-            block_height: None,
+            ..Default::default()
         }
     }
 }
@@ -276,18 +262,11 @@ impl From<EventData<MintEventData>> for Action {
         let collection_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection.as_bytes());
 
         Self {
-            id: None,
             tx_type: Some("mint".to_string()),
-            tx_id: None,
-            tx_index: None,
-            price: None,
-            sender: None,
-            receiver: None,
             contract_id: Some(value.data.get_contract_id(&collection)),
             nft_id: Some(value.data.get_token_id(&collection)),
             collection_id: Some(collection_id),
-            block_time: None,
-            block_height: None,
+            ..Default::default()
         }
     }
 }
@@ -346,18 +325,11 @@ impl From<EventData<BurnEventData>> for Action {
         let collection_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection.as_bytes());
 
         Self {
-            id: None,
             tx_type: Some("burn".to_string()),
-            tx_id: None,
-            tx_index: None,
-            price: None,
-            sender: None,
-            receiver: None,
             contract_id: Some(value.data.get_contract_id(&collection)),
             nft_id: Some(value.data.get_token_id(&collection)),
             collection_id: Some(collection_id),
-            block_time: None,
-            block_height: None,
+            ..Default::default()
         }
     }
 }
@@ -405,18 +377,11 @@ impl From<EventData<MintTokenEventData>> for Nft {
 impl From<EventData<MintTokenEventData>> for Action {
     fn from(value: EventData<MintTokenEventData>) -> Self {
         Self {
-            id: None,
             tx_type: Some("mint".to_string()),
-            tx_id: None,
-            tx_index: None,
-            price: None,
-            sender: None,
-            receiver: None,
             contract_id: Some(value.data.get_contract_id()),
             nft_id: Some(value.data.get_token_id()),
             collection_id: Some(value.data.get_collection_id()),
-            block_time: None,
-            block_height: None,
+            ..Default::default()
         }
     }
 }
@@ -464,18 +429,11 @@ impl From<EventData<BurnTokenEventData>> for Nft {
 impl From<EventData<BurnTokenEventData>> for Action {
     fn from(value: EventData<BurnTokenEventData>) -> Self {
         Self {
-            id: None,
             tx_type: Some("burn".to_string()),
-            tx_id: None,
-            tx_index: None,
-            price: None,
-            sender: None,
-            receiver: None,
             contract_id: Some(value.data.get_contract_id()),
             nft_id: Some(value.data.get_token_id()),
             collection_id: Some(value.data.get_collection_id()),
-            block_time: None,
-            block_height: None,
+            ..Default::default()
         }
     }
 }
@@ -483,18 +441,10 @@ impl From<EventData<BurnTokenEventData>> for Action {
 impl From<EventData<TransferEventData>> for Action {
     fn from(value: EventData<TransferEventData>) -> Self {
         Self {
-            id: None,
             tx_type: Some("transfer".to_string()),
-            tx_id: None,
-            tx_index: None,
-            price: None,
-            contract_id: None,
             sender: Some(value.data.get_from()),
             receiver: Some(value.data.get_to()),
-            nft_id: None,
-            collection_id: None,
-            block_time: None,
-            block_height: None,
+            ..Default::default()
         }
     }
 }

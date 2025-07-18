@@ -75,11 +75,11 @@ impl Processable for DBWritingStep {
             contracts,
             collections,
             nfts,
-            actions,
+            _,
             commissions,
         ) = input.data;
 
-        let mut deduped_activities: Vec<NftMarketplaceActivity> = activities
+        let mut deduped_actions: Vec<Action> = activities
             .into_iter()
             .map(|activity| {
                 (
@@ -88,18 +88,14 @@ impl Processable for DBWritingStep {
                         activity.index,
                         activity.marketplace.clone(),
                     ),
-                    activity,
+                    activity.into(),
                 )
             })
             .collect::<HashMap<_, _>>()
             .into_values()
             .collect();
 
-        deduped_activities.sort_by(|a, b| {
-            a.txn_version
-                .cmp(&b.txn_version)
-                .then(a.index.cmp(&b.index))
-        });
+        deduped_actions.sort_by(|a, b| a.tx_index.cmp(&b.tx_index));
 
         let mut deduped_listings: Vec<CurrentNFTMarketplaceListing> = listings
             .into_iter()
@@ -169,27 +165,12 @@ impl Processable for DBWritingStep {
             .into_values()
             .collect();
 
-        let deduped_actions: Vec<Action> = actions
-            .into_iter()
-            .map(|action| (action.id.clone(), action))
-            .collect::<HashMap<_, _>>()
-            .into_values()
-            .collect();
-
         let deduped_commissions: Vec<Commission> = commissions
             .into_iter()
             .map(|commission| (commission.id.clone(), commission))
             .collect::<HashMap<_, _>>()
             .into_values()
             .collect();
-
-        // Execute DB operations with sorted, deduplicated data
-        let activities_result = execute_in_chunks(
-            self.db_pool.clone(),
-            insert_nft_marketplace_activities,
-            &deduped_activities,
-            200,
-        );
 
         let listings_result = execute_in_chunks(
             self.db_pool.clone(),
@@ -239,7 +220,6 @@ impl Processable for DBWritingStep {
         let nft_result = execute_in_chunks(self.db_pool.clone(), insert_nfts, &deduped_nfts, 200);
 
         let (
-            activities_result,
             listings_result,
             token_offers_result,
             collection_offers_result,
@@ -249,7 +229,6 @@ impl Processable for DBWritingStep {
             action_result,
             commission_result,
         ) = tokio::join!(
-            activities_result,
             listings_result,
             token_offers_result,
             collection_offers_result,
@@ -261,7 +240,6 @@ impl Processable for DBWritingStep {
         );
 
         for result in [
-            activities_result,
             listings_result,
             token_offers_result,
             collection_offers_result,
@@ -295,17 +273,6 @@ impl NamedStep for DBWritingStep {
     fn name(&self) -> String {
         "DBWritingStep".to_string()
     }
-}
-
-pub fn insert_nft_marketplace_activities(
-    items_to_insert: Vec<NftMarketplaceActivity>,
-) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
-    use crate::schema::nft_marketplace_activities::dsl::*;
-
-    diesel::insert_into(schema::nft_marketplace_activities::table)
-        .values(items_to_insert)
-        .on_conflict((txn_version, index, marketplace))
-        .do_nothing()
 }
 
 pub fn insert_current_nft_marketplace_listings(

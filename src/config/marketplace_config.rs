@@ -39,8 +39,8 @@ pub struct NFTMarketplaceConfig {
     /// Maps event type strings to their corresponding MarketplaceEventType enum values.
     /// This mapping is used to standardize different marketplace event types across
     /// different NFT marketplaces into a standarzied event types for processing.
-    /// For example, a "ListNFT" event from one marketplace might map to PlaceListing
-    /// while another marketplace's "CreateListing" event would also map to PlaceListing.
+    /// For example, a "ListNFT" event from one marketplace might map to List
+    /// while another marketplace's "CreateListing" event would also map to List.
     #[serde(default)]
     pub event_model_mapping: HashMap<String, MarketplaceEventType>,
     #[serde(default)]
@@ -87,17 +87,17 @@ pub struct ResourceRemapping {
 #[diesel(sql_type = Text)]
 pub enum MarketplaceEventType {
     // Listing events
-    PlaceListing,
-    CancelListing,
-    FillListing,
-    // Token offer events
-    PlaceTokenOffer,
-    CancelTokenOffer,
-    FillTokenOffer,
-    // Collection offer events
-    PlaceCollectionOffer,
-    CancelCollectionOffer,
-    FillCollectionOffer,
+    List,
+    Unlist,
+    Buy,
+    // Token bid events
+    SoloBid,
+    UnlistBid,
+    AcceptBid,
+    // Collection bid events
+    CollectionBid,
+    CancelCollectionBid,
+    AcceptCollectionBid,
     #[default]
     Unknown,
 }

@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS nft_marketplace_activities (
   txn_version BIGINT,
   index BIGINT,
+  txn_id VARCHAR(66) NOT NULL,
   raw_event_type VARCHAR NOT NULL,
   standard_event_type VARCHAR NOT NULL,
   creator_address VARCHAR(66),
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS nft_marketplace_activities (
   marketplace VARCHAR NOT NULL,
   contract_address VARCHAR NOT NULL,
   block_timestamp TIMESTAMP NOT NULL,
+  block_height BIGINT,
   PRIMARY KEY (txn_version, index)
 );
 

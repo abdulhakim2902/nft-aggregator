@@ -16,6 +16,10 @@ diesel::table! {
         nft_id -> Nullable<Uuid>,
         contract_id -> Nullable<Uuid>,
         collection_id -> Nullable<Uuid>,
+        #[max_length = 30]
+        market_name -> Nullable<Varchar>,
+        market_contract_id -> Nullable<Uuid>,
+        usd_price -> Nullable<Numeric>,
         block_time -> Timestamptz,
         block_height -> Int8,
     }
@@ -143,6 +147,8 @@ diesel::table! {
     nft_marketplace_activities (txn_version, index, marketplace) {
         txn_version -> Int8,
         index -> Int8,
+        #[max_length = 66]
+        txn_id -> Varchar,
         raw_event_type -> Varchar,
         standard_event_type -> Varchar,
         #[max_length = 66]
@@ -167,6 +173,7 @@ diesel::table! {
         marketplace -> Varchar,
         contract_address -> Varchar,
         block_timestamp -> Timestamp,
+        block_height -> Nullable<Int8>,
         expiration_time -> Nullable<Timestamp>,
         bid_key -> Nullable<Int8>,
     }
