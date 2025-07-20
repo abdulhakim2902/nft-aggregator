@@ -3,7 +3,9 @@ use crate::{
         EventFieldRemappings, EventType, MarketplaceEventType, NFTMarketplaceConfig,
     },
     models::{
-        marketplace::{BidModel, MarketplaceField, MarketplaceModel, NftMarketplaceActivity},
+        marketplace::{
+            BidModel, MarketplaceField, MarketplaceModel, NftMarketplaceActivity, TokenVersion,
+        },
         EventModel,
     },
     steps::{remappers::TableType, HashableJsonPath},
@@ -104,6 +106,7 @@ impl EventRemapper {
                             raw_event_type: event.event_type.to_string(),
                             json_data: serde_json::to_value(&event).unwrap(),
                             standard_event_type: event_type.clone(),
+                            token_version: Some(TokenVersion::V2),
                             ..Default::default()
                         };
 
@@ -181,6 +184,7 @@ impl EventRemapper {
                             );
 
                             if let Some(token_data_id) = token_data_id {
+                                activity.token_version = Some(TokenVersion::V1);
                                 activity.set_field(MarketplaceField::TokenDataId, token_data_id);
                             }
                         }

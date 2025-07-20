@@ -135,7 +135,22 @@ impl Processable for DBWritingStep {
             if activity.is_valid_collection() {
                 let collection: Collection = activity.to_owned().into();
                 let key = collection.id;
-                deduped_collections.insert(key, collection);
+                deduped_collections
+                    .entry(key)
+                    .and_modify(|existing: &mut Collection| {
+                        if let Some(supply) = collection.supply.as_ref() {
+                            existing.supply = Some(*supply);
+                        }
+
+                        if let Some(desc) = collection.description.as_ref() {
+                            existing.description = Some(desc.to_string());
+                        }
+
+                        if let Some(cover_url) = collection.cover_url.as_ref() {
+                            existing.cover_url = Some(cover_url.to_string())
+                        }
+                    })
+                    .or_insert(collection);
             }
 
             if activity.is_valid_nft() {
@@ -159,16 +174,25 @@ impl Processable for DBWritingStep {
         let bids: Vec<Bid> = deduped_bids.into_values().collect();
         let listings: Vec<Listing> = deduped_listings.into_values().collect();
         let nfts: Vec<Nft> = deduped_nfts.into_values().collect();
+        let collections: Vec<Collection> = deduped_collections.into_values().collect();
 
         let action_fut = execute_in_chunks(self.db_pool.clone(), insert_actions, &actions, 200);
         let bid_fut = execute_in_chunks(self.db_pool.clone(), insert_bids, &bids, 200);
         let listing_fut = execute_in_chunks(self.db_pool.clone(), insert_listings, &listings, 200);
         let nft_fut = execute_in_chunks(self.db_pool.clone(), insert_nfts, &nfts, 200);
+        let collection_fut =
+            execute_in_chunks(self.db_pool.clone(), insert_collections, &collections, 200);
 
-        let (action_result, bid_result, listing_result, nft_result) =
-            tokio::join!(action_fut, bid_fut, listing_fut, nft_fut);
+        let (action_result, bid_result, listing_result, nft_result, collection_result) =
+            tokio::join!(action_fut, bid_fut, listing_fut, nft_fut, collection_fut);
 
-        for result in [action_result, bid_result, listing_result, nft_result] {
+        for result in [
+            action_result,
+            bid_result,
+            listing_result,
+            nft_result,
+            collection_result,
+        ] {
             match result {
                 Ok(_) => (),
                 Err(e) => {
@@ -216,12 +240,9 @@ pub fn insert_collections(
         .on_conflict(id)
         .do_update()
         .set((
-            slug.eq(excluded(slug)),
             supply.eq(excluded(supply)),
-            title.eq(excluded(title)),
             description.eq(excluded(description)),
             cover_url.eq(excluded(cover_url)),
-            contract_id.eq(excluded(contract_id)),
         ))
 }
 
@@ -300,6 +321,8 @@ pub fn insert_nfts(
         .on_conflict(id)
         .do_update()
         .set((
+            collection_id.eq(excluded(collection_id)),
+            contract_id.eq(excluded(contract_id)),
             name.eq(excluded(name)),
             owner.eq(excluded(owner)),
             burned.eq(excluded(burned)),
