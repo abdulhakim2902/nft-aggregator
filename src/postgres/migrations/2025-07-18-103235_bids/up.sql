@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS bids (
   collection_id uuid DEFAULT NULL,
   contract_id uuid DEFAULT NULL,
   created_tx_id VARCHAR(66) DEFAULT NULL,
-  expires_at timestamp(6) WITH time zone DEFAULT NOW() NOT NULL,
+  expires_at timestamp(6) WITH time zone DEFAULT NULL,
   market_contract_id uuid DEFAULT NULL,
   nonce VARCHAR(128),
   nft_id uuid DEFAULT NULL,

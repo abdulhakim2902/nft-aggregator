@@ -39,7 +39,7 @@ impl DBWritingStep {
 
 #[async_trait]
 impl Processable for DBWritingStep {
-    type Input = Vec<NftMarketplaceActivity>;
+    type Input = Vec<Vec<NftMarketplaceActivity>>;
     type Output = ();
     type RunType = AsyncRunType;
 
@@ -47,87 +47,89 @@ impl Processable for DBWritingStep {
         &mut self,
         input: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<()>>, ProcessorError> {
-        let activities = input.data;
+        let activities_data = input.data;
 
         let mut deduped_actions: HashMap<i64, Action> = HashMap::new();
         let mut deduped_bids: HashMap<Option<Uuid>, Bid> = HashMap::new();
         let mut deduped_listings: HashMap<Option<Uuid>, Listing> = HashMap::new();
 
-        for activity in activities.iter() {
-            let key = activity.get_tx_index();
-            let action: Action = activity.to_owned().into();
-            deduped_actions.insert(key, action);
+        for activities in activities_data {
+            for activity in activities.iter() {
+                let key = activity.get_tx_index();
+                let action: Action = activity.to_owned().into();
+                deduped_actions.insert(key, action);
 
-            if activity.is_valid_bid() {
-                let bid: Bid = activity.to_owned().into();
-                let key = bid.id;
-                deduped_bids
-                    .entry(key)
-                    .and_modify(|existing: &mut Bid| {
-                        let is_active = bid
-                            .status
-                            .clone()
-                            .map_or(false, |status| status.as_str() == "active");
+                if activity.is_valid_bid() {
+                    let bid: Bid = activity.to_owned().into();
+                    let key = bid.id;
+                    deduped_bids
+                        .entry(key)
+                        .and_modify(|existing: &mut Bid| {
+                            let is_active = bid
+                                .status
+                                .clone()
+                                .map_or(false, |status| status.as_str() == "active");
 
-                        if let Some(tx_id) = bid.created_tx_id.clone() {
-                            existing.created_tx_id = Some(tx_id);
-                        }
-
-                        if let Some(tx_id) = bid.accepted_tx_id.clone() {
-                            existing.accepted_tx_id = Some(tx_id);
-                            if is_active {
-                                existing.status = Some("matched".to_string());
+                            if let Some(tx_id) = bid.created_tx_id.clone() {
+                                existing.created_tx_id = Some(tx_id);
                             }
-                        }
 
-                        if let Some(tx_id) = bid.canceled_tx_id.clone() {
-                            existing.canceled_tx_id = Some(tx_id);
-                            if is_active {
-                                existing.status = Some("cancelled".to_string());
-                            };
-                        }
-
-                        if let Some(receiver) = bid.receiver.clone() {
-                            existing.receiver = Some(receiver);
-                        }
-                    })
-                    .or_insert(bid);
-            }
-
-            if activity.is_valid_listing() {
-                let listing: Listing = activity.to_owned().into();
-                let key = listing.id;
-                deduped_listings
-                    .entry(key)
-                    .and_modify(|existing: &mut Listing| {
-                        let is_listed = listing.listed.unwrap_or(false);
-                        let is_latest = listing
-                            .block_time
-                            .zip(existing.block_time)
-                            .map_or(false, |(current, existing)| current.gt(&existing));
-
-                        if is_latest {
-                            existing.block_time = listing.block_time.clone();
-                            existing.listed = listing.listed.clone();
-                            existing.block_height = listing.block_height.clone();
-                            existing.commission_id = listing.commission_id.clone();
-                            existing.nft_id = listing.nft_id.clone();
-                            existing.nonce = listing.nonce.clone();
-                            existing.price = listing.price.clone();
-                            existing.price_str = listing.price_str.clone();
-                            existing.seller = listing.seller.clone();
-                            existing.tx_index = listing.tx_index.clone();
-
-                            if !is_listed {
-                                existing.nonce = None;
-                                existing.price = None;
-                                existing.price_str = None;
-                                existing.seller = None;
-                                existing.tx_index = None;
+                            if let Some(tx_id) = bid.accepted_tx_id.clone() {
+                                existing.accepted_tx_id = Some(tx_id);
+                                if is_active {
+                                    existing.status = Some("matched".to_string());
+                                }
                             }
-                        }
-                    })
-                    .or_insert(listing);
+
+                            if let Some(tx_id) = bid.canceled_tx_id.clone() {
+                                existing.canceled_tx_id = Some(tx_id);
+                                if is_active {
+                                    existing.status = Some("cancelled".to_string());
+                                };
+                            }
+
+                            if let Some(receiver) = bid.receiver.clone() {
+                                existing.receiver = Some(receiver);
+                            }
+                        })
+                        .or_insert(bid);
+                }
+
+                if activity.is_valid_listing() {
+                    let listing: Listing = activity.to_owned().into();
+                    let key = listing.id;
+                    deduped_listings
+                        .entry(key)
+                        .and_modify(|existing: &mut Listing| {
+                            let is_listed = listing.listed.unwrap_or(false);
+                            let is_latest = listing
+                                .block_time
+                                .zip(existing.block_time)
+                                .map_or(false, |(current, existing)| current.gt(&existing));
+
+                            if is_latest {
+                                existing.block_time = listing.block_time.clone();
+                                existing.listed = listing.listed.clone();
+                                existing.block_height = listing.block_height.clone();
+                                existing.commission_id = listing.commission_id.clone();
+                                existing.nft_id = listing.nft_id.clone();
+                                existing.nonce = listing.nonce.clone();
+                                existing.price = listing.price.clone();
+                                existing.price_str = listing.price_str.clone();
+                                existing.seller = listing.seller.clone();
+                                existing.tx_index = listing.tx_index.clone();
+
+                                if !is_listed {
+                                    existing.nonce = None;
+                                    existing.price = None;
+                                    existing.price_str = None;
+                                    existing.seller = None;
+                                    existing.tx_index = None;
+                                }
+                            }
+                        })
+                        .or_insert(listing);
+                }
             }
         }
 
@@ -251,10 +253,13 @@ pub fn insert_bids(
         .on_conflict(id)
         .do_update()
         .set((
+            bidder.eq(excluded(bidder)),
             status.eq(excluded(status)),
             accepted_tx_id.eq(excluded(accepted_tx_id)),
             canceled_tx_id.eq(excluded(canceled_tx_id)),
             receiver.eq(excluded(receiver)),
+            expires_at.eq(excluded(expires_at)),
+            nft_id.eq(excluded(nft_id)),
         ))
 }
 

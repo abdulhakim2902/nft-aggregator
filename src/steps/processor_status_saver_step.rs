@@ -42,7 +42,7 @@ impl ProcessorStatusSaver for PostgresProcessorStatusSaver {
         last_success_batch: &TransactionContext<()>,
     ) -> Result<(), ProcessorError> {
         save_processor_status(
-            &self.config.nft_marketplace_config.name,
+            "nft_aggregator",
             self.config.processor_mode.clone(),
             last_success_batch,
             self.db_pool.clone(),
@@ -161,7 +161,7 @@ pub async fn get_starting_version(
     config: &IndexerProcessorConfig,
     db_pool: ArcDbPool,
 ) -> Result<Option<u64>, ProcessorError> {
-    let processor_name = &config.nft_marketplace_config.name;
+    let processor_name = "nft_aggregator";
     let mut conn = db_pool
         .get()
         .await
@@ -280,7 +280,7 @@ pub async fn get_end_version(
     config: &IndexerProcessorConfig,
     db_pool: ArcDbPool,
 ) -> Result<Option<u64>, ProcessorError> {
-    let processor_name = &config.nft_marketplace_config.get_name();
+    let processor_name = "nft_aggregator";
     let processor_mode = &config.processor_mode;
     match processor_mode {
         ProcessorMode::Default(_) => Ok(None),

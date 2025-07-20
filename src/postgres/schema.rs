@@ -52,7 +52,7 @@ diesel::table! {
         contract_id -> Nullable<Uuid>,
         #[max_length = 66]
         created_tx_id -> Nullable<Varchar>,
-        expires_at -> Timestamptz,
+        expires_at -> Nullable<Timestamptz>,
         market_contract_id -> Nullable<Uuid>,
         #[max_length = 128]
         nonce -> Nullable<Varchar>,

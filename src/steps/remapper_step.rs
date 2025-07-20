@@ -13,26 +13,38 @@ use aptos_indexer_processor_sdk::{
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{collections::HashMap, sync::Arc};
 
-pub struct RemapResult {
-    pub activities: Vec<NftMarketplaceActivity>,
-    pub errors: Vec<String>,
+pub struct Remapper {
+    event_remapper: Arc<EventRemapper>,
+    resource_remapper: Arc<ResourceMapper>,
 }
 
 pub struct ProcessStep
 where
     Self: Sized + Send + 'static,
 {
-    event_remapper: Arc<EventRemapper>,
-    resource_remapper: Arc<ResourceMapper>,
+    remappers: Arc<Vec<Remapper>>,
 }
 
 impl ProcessStep {
-    pub fn new(config: NFTMarketplaceConfig) -> anyhow::Result<Self> {
-        let event_remapper: Arc<EventRemapper> = EventRemapper::new(&config)?;
-        let resource_remapper: Arc<ResourceMapper> = ResourceMapper::new(&config)?;
+    pub fn new(configs: Vec<NFTMarketplaceConfig>) -> anyhow::Result<Self> {
+        let remappers = configs
+            .par_iter()
+            .map(|config| {
+                let event_remapper: Arc<EventRemapper> = EventRemapper::new(&config)?;
+                let resource_remapper: Arc<ResourceMapper> = ResourceMapper::new(&config)?;
+
+                Ok(Remapper {
+                    event_remapper,
+                    resource_remapper,
+                })
+            })
+            .collect::<anyhow::Result<Vec<Remapper>>>()
+            .map_err(|e| ProcessorError::ProcessError {
+                message: format!("{e:#}"),
+            })?;
+
         Ok(Self {
-            event_remapper,
-            resource_remapper,
+            remappers: Arc::new(remappers),
         })
     }
 }
@@ -40,49 +52,63 @@ impl ProcessStep {
 #[async_trait::async_trait]
 impl Processable for ProcessStep {
     type Input = Vec<Transaction>;
-    type Output = Vec<NftMarketplaceActivity>;
+    type Output = Vec<Vec<NftMarketplaceActivity>>;
     type RunType = AsyncRunType;
 
     async fn process(
         &mut self,
         transactions: TransactionContext<Vec<Transaction>>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
-        let results = transactions
-            .data
+        let results = self
+            .remappers
             .par_iter()
-            .map(|transaction| {
-                let event_remapper = self.event_remapper.clone();
-                let resource_remapper = self.resource_remapper.clone();
-                let activities = event_remapper.remap_events(transaction.clone())?;
+            .map(|this| {
+                let result = transactions
+                    .data
+                    .par_iter()
+                    .map(|transaction| {
+                        let event_remapper = this.event_remapper.clone();
+                        let resource_remapper = this.resource_remapper.clone();
 
-                let resource_updates = resource_remapper.remap_resources(transaction.clone())?;
+                        let activities = event_remapper.remap_events(transaction.clone())?;
+                        let resource_updates =
+                            resource_remapper.remap_resources(transaction.clone())?;
 
-                Ok((activities, resource_updates))
+                        Ok((activities, resource_updates))
+                    })
+                    .collect::<anyhow::Result<Vec<_>>>();
+
+                result
             })
-            .collect::<anyhow::Result<Vec<_>>>()
+            .collect::<anyhow::Result<Vec<Vec<_>>>>()
             .map_err(|e| ProcessorError::ProcessError {
                 message: format!("{e:#}"),
             })?;
 
-        let (mut all_activities, mut all_resource_updates) = (
-            Vec::new(),
-            HashMap::<String, HashMap<String, String>>::new(),
-        );
+        let mut marketplace_activities = Vec::new();
+        for items in results.iter() {
+            let (mut all_activities, mut all_resource_updates) = (
+                Vec::new(),
+                HashMap::<String, HashMap<String, String>>::new(),
+            );
 
-        for (activities, resource_updates) in results {
-            all_activities.extend(activities);
+            for (activities, resource_updates) in items.clone() {
+                all_activities.extend(activities);
 
-            // Merge resource_updates by key
-            resource_updates.into_iter().for_each(|(key, value_map)| {
-                all_resource_updates
-                    .entry(key)
-                    .or_default()
-                    .extend(value_map);
-            });
+                // Merge resource_updates by key
+                resource_updates.into_iter().for_each(|(key, value_map)| {
+                    all_resource_updates
+                        .entry(key)
+                        .or_default()
+                        .extend(value_map);
+                });
+            }
+
+            marketplace_activities.push(all_activities);
         }
 
         Ok(Some(TransactionContext {
-            data: all_activities,
+            data: marketplace_activities,
             metadata: transactions.metadata,
         }))
     }

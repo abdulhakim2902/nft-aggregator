@@ -58,7 +58,7 @@ impl Processor {
 #[async_trait::async_trait]
 impl ProcessorTrait for Processor {
     fn name(&self) -> &'static str {
-        self.config.nft_marketplace_config.get_name()
+        Box::leak("nft_aggregator".to_string().into_boxed_str())
     }
 
     async fn run_processor(&self) -> Result<()> {
@@ -94,9 +94,9 @@ impl ProcessorTrait for Processor {
         })
         .await?;
 
-        let nft_marketplace_config = self.config.nft_marketplace_config.clone();
+        let nft_marketplace_configs = self.config.nft_marketplace_configs.clone();
 
-        let process = ProcessStep::new(nft_marketplace_config.clone())?;
+        let process = ProcessStep::new(nft_marketplace_configs.clone())?;
         let db_writing = DBWritingStep::new(self.db_pool.clone());
         let version_tracker = VersionTrackerStep::new(
             PostgresProcessorStatusSaver::new(self.config.clone(), self.db_pool.clone()),

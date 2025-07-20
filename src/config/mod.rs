@@ -22,7 +22,7 @@ pub struct IndexerProcessorConfig {
     pub transaction_stream_config: TransactionStreamConfig,
     pub db_config: DbConfig,
     pub processor_mode: ProcessorMode,
-    pub nft_marketplace_config: NFTMarketplaceConfig,
+    pub nft_marketplace_configs: Vec<NFTMarketplaceConfig>,
 }
 
 #[async_trait::async_trait]
@@ -33,7 +33,7 @@ impl RunnableConfig for IndexerProcessorConfig {
     }
 
     fn get_server_name(&self) -> String {
-        self.nft_marketplace_config.get_name().to_string()
+        "nft_aggregator".to_string()
     }
 }
 
