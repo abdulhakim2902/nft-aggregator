@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS nfts (
   contract_id uuid DEFAULT NULL,
   collection_id uuid DEFAULT NULL,
   -- Add nft properties
-  -- Add contract uuid
   -- Add ranking BIGINT DEFAULT NULL,
   -- Add rarity NUMERIC(78, 12) DEFAULT NULL,
   -- Add staked BOOLEAN DEFAULT false,
@@ -18,5 +17,6 @@ CREATE TABLE IF NOT EXISTS nfts (
   -- Add chain state
   -- Add asset name
   burned BOOLEAN DEFAULT false,
+  latest_tx_index BIGINT NOT NULL,
   PRIMARY KEY (id)
 );

@@ -1,6 +1,8 @@
 use crate::{
     config::marketplace_config::MarketplaceEventType,
-    models::{action::Action, bid::Bid, listing::Listing, EventModel},
+    models::{
+        action::Action, bid::Bid, collection::Collection, listing::Listing, nft::Nft, EventModel,
+    },
     utils::generate_uuid_from_str,
 };
 use aptos_indexer_processor_sdk::aptos_indexer_transaction_stream::utils::time::parse_timestamp_secs;
@@ -113,6 +115,37 @@ impl From<NftMarketplaceActivity> for Listing {
             block_height: Some(value.block_height),
             // TODO: handle commission_id
             commission_id: None,
+        }
+    }
+}
+
+impl From<NftMarketplaceActivity> for Collection {
+    fn from(value: NftMarketplaceActivity) -> Self {
+        Self {
+            id: value.get_collection_id(),
+            contract_id: value.get_contract_id(),
+            title: value.get_field(MarketplaceField::CollectionName),
+            slug: None,
+            supply: None,
+            description: None,
+            cover_url: None,
+        }
+    }
+}
+
+// TODO: Handle nft mutation
+impl From<NftMarketplaceActivity> for Nft {
+    fn from(value: NftMarketplaceActivity) -> Self {
+        Self {
+            id: value.get_nft_id(),
+            collection_id: value.get_collection_id(),
+            contract_id: value.get_contract_id(),
+            name: value.get_field(MarketplaceField::TokenName),
+            owner: value.get_owner(),
+            latest_tx_index: value.get_tx_index(),
+            burned: Some(value.standard_event_type == MarketplaceEventType::Burn),
+            token_id: None,
+            media_url: None,
         }
     }
 }
@@ -369,6 +402,36 @@ impl ListingModel for NftMarketplaceActivity {
             MarketplaceEventType::List => Some(true),
             MarketplaceEventType::Unlist => Some(false),
             MarketplaceEventType::Buy => Some(false),
+            _ => None,
+        }
+    }
+}
+
+impl CollectionModel for NftMarketplaceActivity {
+    fn is_valid_collection(&self) -> bool {
+        self.collection_id.is_some()
+    }
+}
+
+impl NftModel for NftMarketplaceActivity {
+    fn is_valid_nft(&self) -> bool {
+        if self.standard_event_type == MarketplaceEventType::Burn {
+            self.get_nft_id().is_some()
+        } else {
+            self.get_nft_id().is_some() && self.get_owner().is_some()
+        }
+    }
+
+    fn get_owner(&self) -> Option<String> {
+        match self.standard_event_type {
+            MarketplaceEventType::Mint => self.get_field(MarketplaceField::Buyer),
+            MarketplaceEventType::Burn => None,
+            MarketplaceEventType::Transfer => self.get_field(MarketplaceField::Buyer),
+            MarketplaceEventType::List => self.get_field(MarketplaceField::Seller),
+            MarketplaceEventType::Unlist => self.get_field(MarketplaceField::Seller),
+            MarketplaceEventType::Buy => self.get_field(MarketplaceField::Buyer),
+            MarketplaceEventType::AcceptBid => self.get_field(MarketplaceField::Buyer),
+            MarketplaceEventType::AcceptCollectionBid => self.get_field(MarketplaceField::Buyer),
             _ => None,
         }
     }
@@ -964,6 +1027,15 @@ pub trait ListingModel {
     fn get_listing_id(&self) -> Option<Uuid>;
     fn get_listing_status(&self) -> Option<bool>;
     fn is_valid_listing(&self) -> bool;
+}
+
+pub trait CollectionModel {
+    fn is_valid_collection(&self) -> bool;
+}
+
+pub trait NftModel {
+    fn get_owner(&self) -> Option<String>;
+    fn is_valid_nft(&self) -> bool;
 }
 
 #[cfg(test)]

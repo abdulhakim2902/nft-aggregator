@@ -18,6 +18,7 @@ pub struct Nft {
     pub collection_id: Option<Uuid>,
     pub contract_id: Option<Uuid>,
     pub burned: Option<bool>,
+    pub latest_tx_index: i64,
 }
 
 impl Nft {

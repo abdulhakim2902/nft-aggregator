@@ -6,7 +6,7 @@ use crate::{
         commission::Commission,
         contract::Contract,
         listing::Listing,
-        marketplace::{BidModel, ListingModel, NftMarketplaceActivity},
+        marketplace::{BidModel, CollectionModel, ListingModel, NftMarketplaceActivity, NftModel},
         nft::Nft,
     },
     postgres::postgres_utils::{execute_in_chunks, ArcDbPool},
@@ -52,6 +52,8 @@ impl Processable for DBWritingStep {
         let mut deduped_actions: HashMap<i64, Action> = HashMap::new();
         let mut deduped_bids: HashMap<Option<Uuid>, Bid> = HashMap::new();
         let mut deduped_listings: HashMap<Option<Uuid>, Listing> = HashMap::new();
+        let mut deduped_collections: HashMap<Option<Uuid>, Collection> = HashMap::new();
+        let mut deduped_nfts: HashMap<Option<Uuid>, Nft> = HashMap::new();
 
         for activity in activities.iter() {
             let key = activity.get_tx_index();
@@ -129,20 +131,44 @@ impl Processable for DBWritingStep {
                     })
                     .or_insert(listing);
             }
+
+            if activity.is_valid_collection() {
+                let collection: Collection = activity.to_owned().into();
+                let key = collection.id;
+                deduped_collections.insert(key, collection);
+            }
+
+            if activity.is_valid_nft() {
+                let nft: Nft = activity.to_owned().into();
+                let key = nft.id;
+                deduped_nfts
+                    .entry(key)
+                    .and_modify(|existing: &mut Nft| {
+                        if nft.latest_tx_index > existing.latest_tx_index {
+                            existing.name = nft.name.clone();
+                            existing.burned = nft.burned.clone();
+                            existing.owner = nft.owner.clone();
+                            existing.latest_tx_index = nft.latest_tx_index;
+                        }
+                    })
+                    .or_insert(nft);
+            }
         }
 
         let actions: Vec<Action> = deduped_actions.into_values().collect();
         let bids: Vec<Bid> = deduped_bids.into_values().collect();
         let listings: Vec<Listing> = deduped_listings.into_values().collect();
+        let nfts: Vec<Nft> = deduped_nfts.into_values().collect();
 
         let action_fut = execute_in_chunks(self.db_pool.clone(), insert_actions, &actions, 200);
         let bid_fut = execute_in_chunks(self.db_pool.clone(), insert_bids, &bids, 200);
         let listing_fut = execute_in_chunks(self.db_pool.clone(), insert_listings, &listings, 200);
+        let nft_fut = execute_in_chunks(self.db_pool.clone(), insert_nfts, &nfts, 200);
 
-        let (action_result, bid_result, listing_result) =
-            tokio::join!(action_fut, bid_fut, listing_fut,);
+        let (action_result, bid_result, listing_result, nft_result) =
+            tokio::join!(action_fut, bid_fut, listing_fut, nft_fut);
 
-        for result in [action_result, bid_result, listing_result] {
+        for result in [action_result, bid_result, listing_result, nft_result] {
             match result {
                 Ok(_) => (),
                 Err(e) => {
@@ -196,26 +222,6 @@ pub fn insert_collections(
             description.eq(excluded(description)),
             cover_url.eq(excluded(cover_url)),
             contract_id.eq(excluded(contract_id)),
-        ))
-}
-
-pub fn insert_nfts(
-    items_to_insert: Vec<Nft>,
-) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
-    use crate::schema::nfts::dsl::*;
-
-    diesel::insert_into(schema::nfts::table)
-        .values(items_to_insert)
-        .on_conflict(id)
-        .do_update()
-        .set((
-            media_url.eq(excluded(media_url)),
-            name.eq(excluded(name)),
-            owner.eq(excluded(owner)),
-            token_id.eq(excluded(token_id)),
-            collection_id.eq(excluded(collection_id)),
-            contract_id.eq(excluded(contract_id)),
-            burned.eq(excluded(burned)),
         ))
 }
 
@@ -282,4 +288,22 @@ pub fn insert_listings(
             tx_index.eq(excluded(tx_index)),
         ))
         .filter(block_time.le(excluded(block_time)))
+}
+
+pub fn insert_nfts(
+    items_to_insert: Vec<Nft>,
+) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
+    use crate::schema::nfts::dsl::*;
+
+    diesel::insert_into(schema::nfts::table)
+        .values(items_to_insert)
+        .on_conflict(id)
+        .do_update()
+        .set((
+            name.eq(excluded(name)),
+            owner.eq(excluded(owner)),
+            burned.eq(excluded(burned)),
+            latest_tx_index.eq(excluded(latest_tx_index)),
+        ))
+        .filter(latest_tx_index.le(excluded(latest_tx_index)))
 }

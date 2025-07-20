@@ -84,7 +84,7 @@ impl EventRemapper {
             for event in events.iter() {
                 let event_type_str = event.event_type.to_string();
 
-                // Handle marketplace event
+                // Handle nft activity event
                 if let Some(remappings) = self.field_remappings.get(&event.event_type) {
                     let event_type = self.marketplace_event_type_mapping.get(&event_type_str);
 

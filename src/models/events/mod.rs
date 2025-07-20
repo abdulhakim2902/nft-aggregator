@@ -90,6 +90,7 @@ impl From<EventData<CreateTokenDataEventData>> for Nft {
             name: Some(value.data.name),
             owner: None,
             burned: None,
+            latest_tx_index: 0,
         }
     }
 }
@@ -140,6 +141,7 @@ impl From<EventData<MintData>> for Nft {
             name: None,
             owner: None,
             burned: None,
+            latest_tx_index: 0,
         }
     }
 }
@@ -192,6 +194,7 @@ impl From<EventData<BurnData>> for Nft {
             name: None,
             owner: None,
             burned: Some(true),
+            latest_tx_index: 0,
         }
     }
 }
@@ -252,6 +255,7 @@ impl From<EventData<MintEventData>> for Nft {
             name: None,
             owner: None,
             burned: None,
+            latest_tx_index: 0,
         }
     }
 }
@@ -315,6 +319,7 @@ impl From<EventData<BurnEventData>> for Nft {
             name: None,
             owner: None,
             burned: Some(true),
+            latest_tx_index: 0,
         }
     }
 }
@@ -370,6 +375,7 @@ impl From<EventData<MintTokenEventData>> for Nft {
             name: None,
             owner: None,
             burned: None,
+            latest_tx_index: 0,
         }
     }
 }
@@ -422,6 +428,7 @@ impl From<EventData<BurnTokenEventData>> for Nft {
             name: None,
             owner: None,
             burned: None,
+            latest_tx_index: 0,
         }
     }
 }

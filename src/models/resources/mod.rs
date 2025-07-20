@@ -218,6 +218,7 @@ impl From<ResourceData<Token>> for Nft {
             token_id: Some(token),
             collection_id: Some(collection_id),
             burned: None,
+            latest_tx_index: 0,
         }
     }
 }
@@ -235,6 +236,7 @@ impl From<ResourceData<TokenIdentifiers>> for Nft {
             token_id: Some(token),
             collection_id: None,
             burned: None,
+            latest_tx_index: 0,
         }
     }
 }
