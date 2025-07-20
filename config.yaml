@@ -2,11 +2,11 @@ health_check_port: 8085
 server_config:
   processor_mode:
     type: default
-    initial_starting_version: 23346731
+    initial_starting_version: 1997824036
   transaction_stream_config:
     indexer_grpc_data_service_address: "https://grpc.mainnet.aptoslabs.com:443"
     # At which tx version to start indexing, usually this is the tx version when the contract was deployed
-    starting_version: 23346731
+    starting_version: 1997824036
     # At which tx version to stop indexing
     # request_ending_version: 10000
     # Go to https://developers.aptoslabs.com/ to create a project and get an API token
@@ -22,22 +22,22 @@ server_config:
     - name: "token_activities"
       event_model_mapping:
         # V1 TOKEN EVENT
-        0x3::token::MintTokenEvent: mint
-        0x3::token::Mint: mint
-        0x3::token::BurnTokenEvent: burn
-        0x3::token::Burn: burn
-        0x3::token::DepositEvent: deposit
-        0x3::token::TokenDeposit: deposit
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::MintTokenEvent: mint
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::Mint: mint
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::BurnTokenEvent: burn
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::Burn: burn
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::DepositEvent: deposit
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::TokenDeposit: deposit
         # V2 TOKEN EVENT
-        0x4::collection::Mint: mint
-        0x4::collection::MintEvent: mint
-        0x4::collection::Burn: burn
-        0x4::collection::BurnEvent: burn
-        0x1::object::TransferEvent: transfer
-        0x1::object::Transfer: transfer
+        0x0000000000000000000000000000000000000000000000000000000000000004::collection::Mint: mint
+        0x0000000000000000000000000000000000000000000000000000000000000004::collection::MintEvent: mint
+        0x0000000000000000000000000000000000000000000000000000000000000004::collection::Burn: burn
+        0x0000000000000000000000000000000000000000000000000000000000000004::collection::BurnEvent: burn
+        0x0000000000000000000000000000000000000000000000000000000000000001::object::TransferEvent: transfer
+        0x0000000000000000000000000000000000000000000000000000000000000001::object::Transfer: transfer
       events:
         # V1 TOKEN EVENT
-        0x3::token::MintTokenEvent:
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::MintTokenEvent:
           event_fields:
             "$.id.collection":
               - table: nft_marketplace_activities
@@ -48,7 +48,7 @@ server_config:
             "$.id.name":
               - table: nft_marketplace_activities
                 column: token_name
-        0x3::token::Mint:
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::Mint:
           event_fields:
             "$.id.collection":
               - table: nft_marketplace_activities
@@ -59,7 +59,7 @@ server_config:
             "$.id.name":
               - table: nft_marketplace_activities
                 column: token_name
-        0x3::token::BurnTokenEvent:
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::BurnTokenEvent:
           event_fields:
             "$.id.token_data_id.collection":
               - table: nft_marketplace_activities
@@ -70,7 +70,7 @@ server_config:
             "$.id.token_data_id.name":
               - table: nft_marketplace_activities
                 column: token_name
-        0x3::token::Burn:
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::Burn:
           event_fields:
             "$.id.token_data_id.collection":
               - table: nft_marketplace_activities
@@ -81,7 +81,7 @@ server_config:
             "$.id.token_data_id.name":
               - table: nft_marketplace_activities
                 column: token_name
-        0x3::token::DepositEvent:
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::DepositEvent:
           event_fields:
             "$.id.token_data_id.collection":
               - table: nft_marketplace_activities
@@ -92,7 +92,7 @@ server_config:
             "$.id.token_data_id.name":
               - table: nft_marketplace_activities
                 column: token_name
-        0x3::token::TokenDeposit:
+        0x0000000000000000000000000000000000000000000000000000000000000003::token::TokenDeposit:
           event_fields:
             "$.id.token_data_id.collection":
               - table: nft_marketplace_activities
@@ -104,7 +104,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: token_name
         # V2 TOKEN EVENT
-        0x4::collection::Mint:
+        0x0000000000000000000000000000000000000000000000000000000000000004::collection::Mint:
           event_fields:
             "$.collection":
               - table: nft_marketplace_activities
@@ -112,12 +112,12 @@ server_config:
             "$.token":
               - table: nft_marketplace_activities
                 column: token_data_id
-        0x4::collection::MintEvent:
+        0x0000000000000000000000000000000000000000000000000000000000000004::collection::MintEvent:
           event_fields:
             "$.token":
               - table: nft_marketplace_activities
                 column: token_data_id
-        0x4::collection::Burn: 
+        0x0000000000000000000000000000000000000000000000000000000000000004::collection::Burn: 
           event_fields:
             "$.collection":
               - table: nft_marketplace_activities
@@ -128,12 +128,12 @@ server_config:
             "$.previous_owner":
               - table: nft_marketplace_activities
                 column: seller
-        0x4::collection::BurnEvent: 
+        0x0000000000000000000000000000000000000000000000000000000000000004::collection::BurnEvent: 
           event_fields:
             "$.token":
               - table: nft_marketplace_activities
                 column: token_data_id 
-        0x1::object::Transfer: 
+        0x0000000000000000000000000000000000000000000000000000000000000001::object::Transfer: 
           event_fields:
             "$.from":
               - table: nft_marketplace_activities
@@ -144,7 +144,7 @@ server_config:
             "$.object":
               - table: nft_marketplace_activities
                 column: token_data_id
-        0x1::object::TransferEvent: 
+        0x0000000000000000000000000000000000000000000000000000000000000001::object::TransferEvent: 
           event_fields:
             "$.from":
               - table: nft_marketplace_activities

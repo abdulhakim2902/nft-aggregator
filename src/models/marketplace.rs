@@ -212,26 +212,20 @@ impl MarketplaceModel for NftMarketplaceActivity {
 
     fn get_field(&self, field: MarketplaceField) -> Option<String> {
         match field {
-            MarketplaceField::CollectionId => Some(self.collection_id.clone().unwrap_or_default()),
-            MarketplaceField::TokenDataId => Some(self.token_data_id.clone().unwrap_or_default()),
-            MarketplaceField::TokenName => Some(self.token_name.clone().unwrap_or_default()),
-            MarketplaceField::CreatorAddress => {
-                Some(self.creator_address.clone().unwrap_or_default())
-            },
-            MarketplaceField::CollectionName => {
-                Some(self.collection_name.clone().unwrap_or_default())
-            },
+            MarketplaceField::CollectionId => self.collection_id.clone(),
+            MarketplaceField::TokenDataId => self.token_data_id.clone(),
+            MarketplaceField::TokenName => self.token_name.clone(),
+            MarketplaceField::CreatorAddress => self.creator_address.clone(),
+            MarketplaceField::CollectionName => self.collection_name.clone(),
             MarketplaceField::Price => Some(self.price.to_string()),
-            MarketplaceField::TokenAmount => {
-                Some(self.token_amount.unwrap_or_default().to_string())
-            },
-            MarketplaceField::Buyer => Some(self.buyer.clone().unwrap_or_default()),
-            MarketplaceField::Seller => Some(self.seller.clone().unwrap_or_default()),
+            MarketplaceField::TokenAmount => self.token_amount.map(|amount| amount.to_string()),
+            MarketplaceField::Buyer => self.buyer.clone(),
+            MarketplaceField::Seller => self.seller.clone(),
             MarketplaceField::ExpirationTime => self
                 .expiration_time
                 .map(|ts| ts.and_utc().timestamp().to_string()),
-            MarketplaceField::ListingId => Some(self.listing_id.clone().unwrap_or_default()),
-            MarketplaceField::OfferId => Some(self.offer_id.clone().unwrap_or_default()),
+            MarketplaceField::ListingId => self.listing_id.clone(),
+            MarketplaceField::OfferId => self.offer_id.clone(),
             MarketplaceField::Marketplace => self.marketplace.clone(),
             MarketplaceField::ContractAddress => self.contract_address.clone(),
             MarketplaceField::BlockTimestamp => Some(self.block_timestamp.to_string()),
