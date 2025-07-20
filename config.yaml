@@ -155,6 +155,19 @@ server_config:
             "$.object":
               - table: nft_marketplace_activities
                 column: token_data_id
+      resources:
+        0x0000000000000000000000000000000000000000000000000000000000000004::collection::Collection:
+          resource_fields:
+            "$.name":
+              - table: nft_marketplace_activities
+                colume: collection_name
+        0x0000000000000000000000000000000000000000000000000000000000000004::token::TokenIdentifiers:
+          resource_fields:
+            "$.name.value":
+              - table: nft_marketplace_activities
+                column: token_name
+
+
     - name: "topaz"
       event_model_mapping:
         0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::ListEvent: list

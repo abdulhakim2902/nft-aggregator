@@ -56,6 +56,7 @@ impl Processable for ProcessStep {
         Vec<NftMarketplaceActivity>,
         HashMap<(i64, String), NftMarketplaceActivity>,
         HashMap<(i64, String), NftMarketplaceActivity>,
+        HashMap<String, HashMap<String, String>>,
     )>;
     type RunType = AsyncRunType;
 
@@ -130,6 +131,7 @@ impl Processable for ProcessStep {
                 all_activities,
                 all_transfer_updates,
                 all_deposit_updates,
+                all_resource_updates,
             ));
         }
 

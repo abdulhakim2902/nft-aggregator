@@ -4,7 +4,7 @@ use aptos_indexer_processor_sdk::{
     types::transaction_context::TransactionContext,
     utils::errors::ProcessorError,
 };
-use std::{collections::HashMap, mem};
+use std::{collections::HashMap, mem, str::FromStr};
 
 #[derive(Clone, Debug, Default)]
 pub struct NFTAccumulator {
@@ -43,6 +43,7 @@ impl Processable for NFTReductionStep {
         Vec<NftMarketplaceActivity>,
         HashMap<(i64, String), NftMarketplaceActivity>,
         HashMap<(i64, String), NftMarketplaceActivity>,
+        HashMap<String, HashMap<String, String>>,
     )>;
     type Output = Vec<NftMarketplaceActivity>;
     type RunType = AsyncRunType;
@@ -52,19 +53,27 @@ impl Processable for NFTReductionStep {
         transactions: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
         for marketplace_activity in transactions.data {
-            let (activities, transfers, deposits) = marketplace_activity;
+            let (activities, transfers, deposits, resources) = marketplace_activity;
 
             for mut activity in activities {
                 if let Some(token_data_id) = activity.token_data_id.as_ref() {
                     let key = (activity.txn_version, token_data_id.to_string());
+
+                    // RESOURCE HANDLER
+                    if let Some(resource) = resources.get(token_data_id).cloned() {
+                        for (column, value) in resource {
+                            activity.set_field(
+                                MarketplaceField::from_str(&column).unwrap(),
+                                value.clone(),
+                            );
+                        }
+                    }
 
                     // TOKEN V1 HANDLER
                     if let Some(deposit) = deposits.get(&key).cloned() {
                         if let Some(buyer) = deposit.buyer.as_ref() {
                             activity.set_field(MarketplaceField::Buyer, buyer.to_string());
                         }
-
-                        self.accumulator.add_activity(activity.to_owned());
                     }
 
                     // TOKEN V2 HANDLER
@@ -80,12 +89,11 @@ impl Processable for NFTReductionStep {
                             );
                         }
 
-                        self.accumulator.add_activity(activity);
                         self.accumulator.add_activity(transfer);
                     }
-                } else {
-                    self.accumulator.add_activity(activity);
                 }
+
+                self.accumulator.add_activity(activity);
             }
         }
 
