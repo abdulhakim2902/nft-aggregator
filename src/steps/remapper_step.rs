@@ -52,7 +52,10 @@ impl ProcessStep {
 #[async_trait::async_trait]
 impl Processable for ProcessStep {
     type Input = Vec<Transaction>;
-    type Output = Vec<Vec<NftMarketplaceActivity>>;
+    type Output = Vec<(
+        Vec<NftMarketplaceActivity>,
+        HashMap<(i64, String), NftMarketplaceActivity>,
+    )>;
     type RunType = AsyncRunType;
 
     async fn process(
@@ -70,11 +73,12 @@ impl Processable for ProcessStep {
                         let event_remapper = this.event_remapper.clone();
                         let resource_remapper = this.resource_remapper.clone();
 
-                        let activities = event_remapper.remap_events(transaction.clone())?;
+                        let (activities, transfers) =
+                            event_remapper.remap_events(transaction.clone())?;
                         let resource_updates =
                             resource_remapper.remap_resources(transaction.clone())?;
 
-                        Ok((activities, resource_updates))
+                        Ok((activities, transfers, resource_updates))
                     })
                     .collect::<anyhow::Result<Vec<_>>>();
 
@@ -87,13 +91,19 @@ impl Processable for ProcessStep {
 
         let mut marketplace_activities = Vec::new();
         for items in results.iter() {
-            let (mut all_activities, mut all_resource_updates) = (
+            let (mut all_activities, mut all_transfer_updates, mut all_resource_updates) = (
                 Vec::new(),
+                HashMap::<(i64, String), NftMarketplaceActivity>::new(),
                 HashMap::<String, HashMap<String, String>>::new(),
             );
 
-            for (activities, resource_updates) in items.clone() {
+            for (activities, transfer_updates, resource_updates) in items.clone() {
                 all_activities.extend(activities);
+
+                // Merge transfer activities by key
+                transfer_updates.into_iter().for_each(|(key, value)| {
+                    all_transfer_updates.insert(key, value);
+                });
 
                 // Merge resource_updates by key
                 resource_updates.into_iter().for_each(|(key, value_map)| {
@@ -104,7 +114,7 @@ impl Processable for ProcessStep {
                 });
             }
 
-            marketplace_activities.push(all_activities);
+            marketplace_activities.push((all_activities, all_transfer_updates));
         }
 
         Ok(Some(TransactionContext {

@@ -41,8 +41,8 @@ pub struct NftMarketplaceActivity {
     pub listing_id: Option<String>,
     pub offer_id: Option<String>,
     pub json_data: serde_json::Value,
-    pub marketplace: String,
-    pub contract_address: String,
+    pub marketplace: Option<String>,
+    pub contract_address: Option<String>,
     pub block_timestamp: NaiveDateTime,
     pub block_height: i64,
     pub expiration_time: Option<NaiveDateTime>,
@@ -57,14 +57,14 @@ impl From<NftMarketplaceActivity> for Action {
             collection_id: value.get_collection_id(),
             contract_id: value.get_contract_id(),
             nft_id: value.get_nft_id(),
-            market_contract_id: Some(value.get_market_contract_id()),
+            market_contract_id: value.get_market_contract_id(),
             tx_id: Some(value.txn_id),
             tx_type: Some(value.standard_event_type.to_string()),
             sender: value.seller,
             receiver: value.buyer,
             price: Some(value.price),
             block_time: Some(value.block_timestamp),
-            market_name: Some(value.marketplace),
+            market_name: value.marketplace,
             block_height: Some(value.block_height),
             // TODO: handle usd price
             usd_price: None,
@@ -76,7 +76,7 @@ impl From<NftMarketplaceActivity> for Bid {
     fn from(value: NftMarketplaceActivity) -> Self {
         Self {
             id: value.get_bid_id(),
-            market_contract_id: Some(value.get_market_contract_id()),
+            market_contract_id: value.get_market_contract_id(),
             contract_id: value.get_contract_id(),
             collection_id: value.get_collection_id(),
             nft_id: value.get_nft_id(),
@@ -104,7 +104,7 @@ impl From<NftMarketplaceActivity> for Listing {
             contract_id: value.get_contract_id(),
             nft_id: value.get_nft_id(),
             listed: value.get_listing_status(),
-            market_name: Some(value.marketplace),
+            market_name: value.marketplace,
             seller: value.seller,
             price: Some(value.price),
             price_str: Some(value.price.to_string()),
@@ -144,8 +144,13 @@ impl NftMarketplaceActivity {
             .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
     }
 
-    pub fn get_market_contract_id(&self) -> Uuid {
-        generate_uuid_from_str(&format!("{}::{}", self.contract_address, self.marketplace))
+    pub fn get_market_contract_id(&self) -> Option<Uuid> {
+        self.contract_address
+            .clone()
+            .zip(self.marketplace.clone())
+            .map(|(contract_address, marketplace)| {
+                generate_uuid_from_str(&format!("{}::{}", contract_address, marketplace))
+            })
     }
 }
 
@@ -179,8 +184,8 @@ impl MarketplaceModel for NftMarketplaceActivity {
             MarketplaceField::OfferId | MarketplaceField::CollectionOfferId => {
                 self.offer_id = Some(value)
             },
-            MarketplaceField::Marketplace => self.marketplace = value,
-            MarketplaceField::ContractAddress => self.contract_address = value,
+            MarketplaceField::Marketplace => self.marketplace = Some(value),
+            MarketplaceField::ContractAddress => self.contract_address = Some(value),
             MarketplaceField::BlockTimestamp => {
                 self.block_timestamp = value.parse().unwrap_or(NaiveDateTime::default())
             },
@@ -194,7 +199,7 @@ impl MarketplaceModel for NftMarketplaceActivity {
     // So we use this function to check if has the contract_address and marketplace. to make sure we can easily filter out marketplaces that don't exist.
     // TODO: if we want to be more strict, we can have a whitelist of marketplaces that are allowed to be inserted into the database.
     fn is_valid(&self) -> bool {
-        !self.marketplace.is_empty() && !self.contract_address.is_empty()
+        !self.marketplace.is_none() && !self.contract_address.is_none()
     }
 
     fn table_name(&self) -> &'static str {
@@ -227,8 +232,8 @@ impl MarketplaceModel for NftMarketplaceActivity {
                 .map(|ts| ts.and_utc().timestamp().to_string()),
             MarketplaceField::ListingId => Some(self.listing_id.clone().unwrap_or_default()),
             MarketplaceField::OfferId => Some(self.offer_id.clone().unwrap_or_default()),
-            MarketplaceField::Marketplace => Some(self.marketplace.clone()),
-            MarketplaceField::ContractAddress => Some(self.contract_address.clone()),
+            MarketplaceField::Marketplace => self.marketplace.clone(),
+            MarketplaceField::ContractAddress => self.contract_address.clone(),
             MarketplaceField::BlockTimestamp => Some(self.block_timestamp.to_string()),
             MarketplaceField::BidKey => self.bid_key.map(|val| val.to_string()),
             _ => None,
@@ -263,23 +268,33 @@ impl BidModel for NftMarketplaceActivity {
     fn get_bid_id(&self) -> Option<Uuid> {
         if let Some(type_) = self.get_bid_type() {
             if type_.as_str() == "solo" {
-                self.offer_id.clone().zip(self.token_data_id.clone()).map(
-                    |(offer_id, token_data_id)| {
+                self.offer_id
+                    .clone()
+                    .zip(
+                        self.token_data_id
+                            .clone()
+                            .zip(self.contract_address.clone()),
+                    )
+                    .map(|(offer_id, (token_data_id, contract_addr))| {
                         generate_uuid_from_str(&format!(
                             "{}::{}::{}",
-                            self.contract_address, token_data_id, offer_id,
+                            contract_addr, token_data_id, offer_id,
                         ))
-                    },
-                )
+                    })
             } else {
-                self.offer_id.clone().zip(self.collection_id.clone()).map(
-                    |(offer_id, collection_id)| {
+                self.offer_id
+                    .clone()
+                    .zip(
+                        self.collection_id
+                            .clone()
+                            .zip(self.contract_address.clone()),
+                    )
+                    .map(|(offer_id, (collection_id, contract_addr))| {
                         generate_uuid_from_str(&format!(
                             "{}::{}::{}",
-                            self.contract_address, collection_id, offer_id,
+                            contract_addr, collection_id, offer_id,
                         ))
-                    },
-                )
+                    })
             }
         } else {
             None
@@ -347,9 +362,12 @@ impl ListingModel for NftMarketplaceActivity {
     }
 
     fn get_listing_id(&self) -> Option<Uuid> {
-        self.token_data_id.clone().map(|token_id| {
-            generate_uuid_from_str(&format!("{}::{}::list", self.contract_address, token_id))
-        })
+        self.token_data_id
+            .clone()
+            .zip(self.contract_address.clone())
+            .map(|(token_id, contract_addr)| {
+                generate_uuid_from_str(&format!("{}::{}::list", contract_addr, token_id))
+            })
     }
 
     fn get_listing_status(&self) -> Option<bool> {

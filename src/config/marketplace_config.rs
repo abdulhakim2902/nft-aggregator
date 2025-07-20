@@ -86,6 +86,10 @@ pub struct ResourceRemapping {
 #[strum(serialize_all = "snake_case")]
 #[diesel(sql_type = Text)]
 pub enum MarketplaceEventType {
+    // Token event
+    Mint,
+    Burn,
+    Transfer,
     // Listing events
     List,
     Unlist,

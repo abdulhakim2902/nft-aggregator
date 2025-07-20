@@ -1,71 +1,23 @@
-use crate::{
-    config::marketplace_config::MarketplaceEventType,
-    models::{
-        action::Action,
-        collection::Collection,
-        commission::Commission,
-        contract::Contract,
-        marketplace::{
-            CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
-            CurrentNFTMarketplaceTokenBid, MarketplaceField, MarketplaceModel,
-            NftMarketplaceActivity,
-        },
-        nft::Nft,
-    },
-};
+use crate::models::marketplace::{MarketplaceField, MarketplaceModel, NftMarketplaceActivity};
 use aptos_indexer_processor_sdk::{
     traits::{AsyncRunType, AsyncStep, NamedStep, Processable},
     types::transaction_context::TransactionContext,
     utils::errors::ProcessorError,
 };
-use log::debug;
-use std::{collections::HashMap, mem, str::FromStr};
+use std::{collections::HashMap, mem};
 
 #[derive(Clone, Debug, Default)]
 pub struct NFTAccumulator {
     activities: Vec<NftMarketplaceActivity>,
-    listings: HashMap<String, CurrentNFTMarketplaceListing>,
-    token_offers: HashMap<String, CurrentNFTMarketplaceTokenBid>,
-    collection_offers: HashMap<String, CurrentNFTMarketplaceCollectionBid>,
 }
 
 impl NFTAccumulator {
-    pub fn fold_listing(&mut self, listing: CurrentNFTMarketplaceListing) {
-        let key = format!("{}::{}", listing.marketplace, listing.token_data_id);
-        self.listings.insert(key, listing);
-    }
-
-    pub fn fold_token_offer(&mut self, offer: CurrentNFTMarketplaceTokenBid) {
-        let key = format!(
-            "{}::{}::{}",
-            offer.marketplace, offer.token_data_id, offer.buyer
-        );
-        self.token_offers.insert(key, offer);
-    }
-
-    pub fn fold_collection_offer(&mut self, offer: CurrentNFTMarketplaceCollectionBid) {
-        let key = format!("{}::{}", offer.marketplace, offer.collection_offer_id);
-        self.collection_offers.insert(key, offer);
-    }
-
     pub fn add_activity(&mut self, activity: NftMarketplaceActivity) {
         self.activities.push(activity);
     }
 
-    pub fn drain(
-        &mut self,
-    ) -> (
-        Vec<NftMarketplaceActivity>,
-        Vec<CurrentNFTMarketplaceListing>,
-        Vec<CurrentNFTMarketplaceTokenBid>,
-        Vec<CurrentNFTMarketplaceCollectionBid>,
-    ) {
-        (
-            mem::take(&mut self.activities),
-            self.listings.drain().map(|(_, v)| v).collect(),
-            self.token_offers.drain().map(|(_, v)| v).collect(),
-            self.collection_offers.drain().map(|(_, v)| v).collect(),
-        )
+    pub fn drain(&mut self) -> Vec<NftMarketplaceActivity> {
+        mem::take(&mut self.activities)
     }
 }
 
@@ -85,125 +37,52 @@ impl NFTReductionStep {
     }
 }
 
-pub type Tables = (
-    Vec<NftMarketplaceActivity>,
-    Vec<CurrentNFTMarketplaceListing>,
-    Vec<CurrentNFTMarketplaceTokenBid>,
-    Vec<CurrentNFTMarketplaceCollectionBid>,
-);
-
 #[async_trait::async_trait]
 impl Processable for NFTReductionStep {
-    type Input = (
-        HashMap<i64, Vec<NftMarketplaceActivity>>,
-        Vec<CurrentNFTMarketplaceListing>,
-        Vec<CurrentNFTMarketplaceTokenBid>,
-        Vec<CurrentNFTMarketplaceCollectionBid>,
-        Vec<Contract>,
-        Vec<Collection>,
-        Vec<Nft>,
-        Vec<Action>,
-        Vec<Commission>,
-        HashMap<String, HashMap<String, String>>,
-    );
-    type Output = (
+    type Input = Vec<(
         Vec<NftMarketplaceActivity>,
-        Vec<CurrentNFTMarketplaceListing>,
-        Vec<CurrentNFTMarketplaceTokenBid>,
-        Vec<CurrentNFTMarketplaceCollectionBid>,
-        Vec<Contract>,
-        Vec<Collection>,
-        Vec<Nft>,
-        Vec<Action>,
-        Vec<Commission>,
-    );
+        HashMap<(i64, String), NftMarketplaceActivity>,
+    )>;
+    type Output = Vec<NftMarketplaceActivity>;
     type RunType = AsyncRunType;
 
     async fn process(
         &mut self,
         transactions: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
-        let (
-            mut activities,
-            current_listings,
-            current_token_offers,
-            current_collection_offers,
-            contracts,
-            collections,
-            nfts,
-            actions,
-            commissions,
-            resource_updates,
-        ) = transactions.data;
+        for marketplace_activity in transactions.data {
+            let (activities, transfers) = marketplace_activity;
 
-        // Process listings with resource updates inline
-        for listing in current_listings {
-            if let Some(updates) = resource_updates.get(&listing.token_data_id) {
-                let mut listing = listing;
-                merge_partial_update(&mut listing, updates, &mut activities);
-                self.accumulator.fold_listing(listing);
-            } else {
-                self.accumulator.fold_listing(listing);
-            }
-        }
+            for mut activity in activities {
+                if let Some(token_data_id) = activity.token_data_id.as_ref() {
+                    let key = (activity.txn_version, token_data_id.to_string());
+                    if let Some(mut transfer) = transfers.get(&key).cloned() {
+                        if let Some(buyer) = transfer.buyer.as_ref() {
+                            activity.set_field(MarketplaceField::Buyer, buyer.to_string());
+                        }
 
-        // Process token offers with resource updates inline
-        for offer in current_token_offers {
-            if let Some(updates) = resource_updates.get(&offer.token_data_id) {
-                let mut offer = offer;
-                merge_partial_update(&mut offer, updates, &mut activities);
-                self.accumulator.fold_token_offer(offer);
-            } else {
-                self.accumulator.fold_token_offer(offer);
-            }
-        }
+                        if let Some(seller) = transfer.seller.as_ref() {
+                            activity.set_field(MarketplaceField::Seller, seller.to_string());
+                        }
 
-        // Process collection offers with resource updates inline
-        for collection_offer in current_collection_offers {
-            if !collection_offer.collection_offer_id.is_empty() {
-                if let Some(token_data_id) = &collection_offer.token_data_id {
-                    if let Some(updates) = resource_updates.get(token_data_id) {
-                        let mut offer = collection_offer;
-                        merge_partial_update(&mut offer, updates, &mut activities);
-                        self.accumulator.fold_collection_offer(offer);
-                    } else {
-                        self.accumulator.fold_collection_offer(collection_offer);
+                        if let Some(collection_id) = activity.collection_id.as_ref() {
+                            transfer.set_field(
+                                MarketplaceField::CollectionId,
+                                collection_id.to_string(),
+                            );
+                        }
+
+                        self.accumulator.add_activity(activity);
+                        self.accumulator.add_activity(transfer);
                     }
-                } else if let Some(updates) =
-                    resource_updates.get(&collection_offer.collection_offer_id)
-                {
-                    let mut offer = collection_offer;
-                    merge_partial_update(&mut offer, updates, &mut activities);
-                    self.accumulator.fold_collection_offer(offer);
                 } else {
-                    self.accumulator.fold_collection_offer(collection_offer);
+                    self.accumulator.add_activity(activity);
                 }
-            } else {
-                debug!("Skipping collection offer with empty collection_offer_id");
             }
         }
-
-        // process activities after all updates are applied
-        for activities_vec_same_txn_version in activities.into_values() {
-            for activity in activities_vec_same_txn_version {
-                self.accumulator.add_activity(activity);
-            }
-        }
-
-        let reduced_data = self.accumulator.drain();
 
         Ok(Some(TransactionContext {
-            data: (
-                reduced_data.0,
-                reduced_data.1,
-                reduced_data.2,
-                reduced_data.3,
-                contracts,
-                collections,
-                nfts,
-                actions,
-                commissions,
-            ),
+            data: self.accumulator.drain(),
             metadata: transactions.metadata,
         }))
     }
@@ -214,56 +93,5 @@ impl AsyncStep for NFTReductionStep {}
 impl NamedStep for NFTReductionStep {
     fn name(&self) -> String {
         "NFTReductionStep".to_string()
-    }
-}
-
-fn merge_partial_update<T: MarketplaceModel>(
-    model: &mut T,
-    partial_update: &HashMap<String, String>,
-    activities: &mut HashMap<i64, Vec<NftMarketplaceActivity>>,
-) {
-    for (column, value) in partial_update {
-        // Only update if the field is not set in the event or is empty
-        if model
-            .get_field(MarketplaceField::from_str(column).unwrap())
-            .is_none()
-            || model
-                .get_field(MarketplaceField::from_str(column).unwrap())
-                .is_some_and(|v| v.is_empty())
-        {
-            if let Some(activities_vec) = activities.get_mut(&model.get_txn_version()) {
-                // Try to find matching activity based on token_data_id or collection_id
-                if let Some(matching_activity) = activities_vec.iter_mut().find(|activity| {
-                    // we should first check if it's one of collection offer types
-                    let standard_event_type = model.get_standard_event_type();
-                    if standard_event_type == MarketplaceEventType::CollectionBid.to_string() {
-                        // Match on collection_offer_id for collection offers
-                        model
-                            .get_field(MarketplaceField::CollectionOfferId)
-                            .and_then(|collection_offer_id| {
-                                activity.offer_id.as_ref().map(|activity_offer_id| {
-                                    &collection_offer_id == activity_offer_id
-                                })
-                            })
-                            .unwrap_or(false)
-                    } else {
-                        // Match on token_data_id for other events
-                        model
-                            .get_field(MarketplaceField::TokenDataId)
-                            .and_then(|model_id| {
-                                activity
-                                    .token_data_id
-                                    .as_ref()
-                                    .map(|activity_id| &model_id == activity_id)
-                            })
-                            .unwrap_or(false)
-                    }
-                }) {
-                    matching_activity
-                        .set_field(MarketplaceField::from_str(column).unwrap(), value.clone());
-                }
-            }
-            model.set_field(MarketplaceField::from_str(column).unwrap(), value.clone());
-        }
     }
 }

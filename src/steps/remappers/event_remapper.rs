@@ -61,14 +61,22 @@ impl EventRemapper {
     /// 3. Creates marketplace activity for event
     /// 4. Updates current models (listings, token offers, collection offers)
     /// 5. Generate necessary id fields for models that don't have an id if possible
-    pub fn remap_events(&self, txn: Transaction) -> Result<Vec<NftMarketplaceActivity>> {
+    pub fn remap_events(
+        &self,
+        txn: Transaction,
+    ) -> Result<(
+        Vec<NftMarketplaceActivity>,
+        HashMap<(i64, String), NftMarketplaceActivity>,
+    )> {
         let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
+        let mut transfers: HashMap<(i64, String), NftMarketplaceActivity> = HashMap::new();
 
         if let Some(txn_info) = txn.info.as_ref() {
             let txn_id = format!("0x{}", hex::encode(txn_info.hash.clone()));
             let txn_ts =
                 parse_timestamp(txn.timestamp.as_ref().unwrap(), txn.version as i64).naive_utc();
 
+            let sender = self.get_sender(&txn);
             let events = self.get_events(Arc::new(txn))?;
 
             for event in events.iter() {
@@ -79,12 +87,16 @@ impl EventRemapper {
                     let event_type = self.marketplace_event_type_mapping.get(&event_type_str);
 
                     if let Some(event_type) = event_type.cloned() {
+                        let contract_address = self
+                            .get_marketplace_name()
+                            .map(|_| event.account_address.clone());
+
                         let mut activity = NftMarketplaceActivity {
+                            marketplace: self.get_marketplace_name(),
                             txn_id: txn_id.clone(),
                             txn_version: event.transaction_version,
                             index: event.event_index,
-                            marketplace: self.marketplace_name.clone(),
-                            contract_address: event.account_address.clone(),
+                            contract_address,
                             block_timestamp: txn_ts,
                             block_height: event.transaction_block_height,
                             raw_event_type: event.event_type.to_string(),
@@ -148,22 +160,50 @@ impl EventRemapper {
                         })?;
 
                         // After processing all field remappings, generate necessary id fields if needed for PK
-                        let collection_id = generate_collection_id(
-                            activity.creator_address.clone(),
-                            activity.collection_name.clone(),
-                        );
-                        let token_data_id = generate_token_data_id(
-                            activity.creator_address.clone(),
-                            activity.collection_name.clone(),
-                            activity.token_name.clone(),
-                        );
+                        if activity.get_field(MarketplaceField::CollectionId).is_none() {
+                            let collection_id = generate_collection_id(
+                                activity.creator_address.clone(),
+                                activity.collection_name.clone(),
+                            );
 
-                        if let Some(collection_id) = collection_id {
-                            activity.set_field(MarketplaceField::CollectionId, collection_id);
+                            if let Some(collection_id) = collection_id {
+                                activity.set_field(MarketplaceField::CollectionId, collection_id);
+                            }
                         }
 
-                        if let Some(token_data_id) = token_data_id {
-                            activity.set_field(MarketplaceField::TokenDataId, token_data_id);
+                        if activity.get_field(MarketplaceField::TokenDataId).is_none() {
+                            let token_data_id = generate_token_data_id(
+                                activity.creator_address.clone(),
+                                activity.collection_name.clone(),
+                                activity.token_name.clone(),
+                            );
+
+                            if let Some(token_data_id) = token_data_id {
+                                activity.set_field(MarketplaceField::TokenDataId, token_data_id);
+                            }
+                        }
+
+                        // Missing price
+                        if activity.standard_event_type == MarketplaceEventType::Mint
+                            && activity.get_field(MarketplaceField::CollectionId).is_none()
+                        {
+                            activity.set_field(
+                                MarketplaceField::CollectionId,
+                                standardize_address(&event.account_address),
+                            );
+                        }
+
+                        if activity.standard_event_type == MarketplaceEventType::Burn {
+                            if let Some(sender) = sender.as_ref() {
+                                activity.set_field(MarketplaceField::Seller, sender.to_string());
+                            }
+
+                            if activity.get_field(MarketplaceField::CollectionId).is_none() {
+                                activity.set_field(
+                                    MarketplaceField::CollectionId,
+                                    standardize_address(&event.account_address),
+                                );
+                            }
                         }
 
                         // Handle collection_offer_id separately since it's specific to collection offers
@@ -180,13 +220,28 @@ impl EventRemapper {
                             );
                         }
 
-                        activities.push(activity);
+                        if activity.standard_event_type == MarketplaceEventType::Transfer {
+                            activities.push(activity.clone());
+                        } else if let Some(token_data_id) = activity.token_data_id.as_ref() {
+                            transfers.insert(
+                                (activity.txn_version, token_data_id.to_string()),
+                                activity,
+                            );
+                        }
                     }
                 }
             }
         }
 
-        Ok(activities)
+        Ok((activities, transfers))
+    }
+
+    pub fn get_marketplace_name(&self) -> Option<String> {
+        if self.marketplace_name.as_str() == "token_v2" {
+            None
+        } else {
+            Some(self.marketplace_name.clone())
+        }
     }
 
     fn get_events(&self, transaction: Arc<Transaction>) -> Result<Vec<EventModel>> {
@@ -207,6 +262,28 @@ impl EventRemapper {
             _ => &default,
         };
         EventModel::from_events(raw_events, txn_version, block_height, txn_ts)
+    }
+
+    fn get_sender(&self, transation: &Transaction) -> Option<String> {
+        if let Some(txn_data) = transation.txn_data.as_ref() {
+            match txn_data {
+                TxnData::User(inner) => inner
+                    .request
+                    .clone()
+                    .map(|req| standardize_address(&req.sender)),
+                _ => None,
+            }
+        } else {
+            None
+        }
+        // transation.txn_data(|txn_data| {
+        //     match txn_data {
+        //         TxnData::User(inner) => {
+        //             inner.request.
+        //         },
+        //         _ => {}
+        //     }
+        // })
     }
 }
 
