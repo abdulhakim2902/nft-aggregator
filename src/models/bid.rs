@@ -15,6 +15,7 @@ pub const BIDS_TABLE_NAME: &str = "bids";
 pub struct Bid {
     pub id: Option<Uuid>,
     pub bidder: Option<String>,
+    pub accepted_tx_id: Option<String>,
     pub canceled_tx_id: Option<String>,
     pub collection_id: Option<Uuid>, // 1
     pub contract_id: Option<Uuid>,

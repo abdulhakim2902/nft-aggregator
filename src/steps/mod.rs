@@ -7,7 +7,6 @@ use std::{
 
 pub mod db_writing_step;
 pub mod processor_status_saver_step;
-pub mod reduction_step;
 pub mod remapper_step;
 pub mod remappers;
 

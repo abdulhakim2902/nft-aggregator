@@ -45,13 +45,15 @@ diesel::table! {
         #[max_length = 66]
         bidder -> Varchar,
         #[max_length = 66]
+        accepted_tx_id -> Nullable<Varchar>,
+        #[max_length = 66]
         canceled_tx_id -> Nullable<Varchar>,
         collection_id -> Nullable<Uuid>,
         contract_id -> Nullable<Uuid>,
         #[max_length = 66]
-        created_tx_id -> Varchar,
+        created_tx_id -> Nullable<Varchar>,
         expires_at -> Timestamptz,
-        market_contract_id -> Uuid,
+        market_contract_id -> Nullable<Uuid>,
         #[max_length = 128]
         nonce -> Nullable<Varchar>,
         nft_id -> Nullable<Uuid>,

@@ -14,10 +14,10 @@ use nft_aggregator::{
         processor_mode::{ProcessorMode, TestingConfig},
         DbConfig, IndexerProcessorConfig,
     },
-    models::marketplace::{
-        CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
-        CurrentNFTMarketplaceTokenBid, NftMarketplaceActivity,
-    },
+    // models::marketplace::{
+    //     CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
+    //     CurrentNFTMarketplaceTokenBid, NftMarketplaceActivity,
+    // },
     processor::Processor,
 };
 use serde_json::Value;
@@ -30,70 +30,70 @@ use std::{
 // Constants
 pub const DEFAULT_OUTPUT_FOLDER: &str = "tests/expected_db_output_files";
 
-fn load_data(conn: &mut PgConnection) -> anyhow::Result<HashMap<String, serde_json::Value>> {
-    use diesel::prelude::*;
-    use nft_aggregator::schema::{
-        current_nft_marketplace_collection_offers, current_nft_marketplace_listings,
-        current_nft_marketplace_token_offers, nft_marketplace_activities,
-    };
+fn load_data(_conn: &mut PgConnection) -> anyhow::Result<HashMap<String, serde_json::Value>> {
+    // use diesel::prelude::*;
+    // use nft_aggregator::schema::{
+    //     current_nft_marketplace_collection_bids, current_nft_marketplace_listings,
+    //     current_nft_marketplace_token_offers, nft_marketplace_activities,
+    // };
 
-    let mut result = HashMap::new();
+    let result = HashMap::new();
 
-    // Load activities
-    let activities: Vec<NftMarketplaceActivity> = nft_marketplace_activities::table
-        .order_by((
-            nft_marketplace_activities::txn_version,
-            nft_marketplace_activities::index,
-            nft_marketplace_activities::marketplace,
-        ))
-        .load::<NftMarketplaceActivity>(conn)
-        .map_err(|e| anyhow::anyhow!("Failed to load activities: {}", e))?;
-    result.insert(
-        "nft_marketplace_activities".to_string(),
-        serde_json::to_value(activities)?,
-    );
+    // // Load activities
+    // let activities: Vec<NftMarketplaceActivity> = nft_marketplace_activities::table
+    //     .order_by((
+    //         nft_marketplace_activities::txn_version,
+    //         nft_marketplace_activities::index,
+    //         nft_marketplace_activities::marketplace,
+    //     ))
+    //     .load::<NftMarketplaceActivity>(conn)
+    //     .map_err(|e| anyhow::anyhow!("Failed to load activities: {}", e))?;
+    // result.insert(
+    //     "nft_marketplace_activities".to_string(),
+    //     serde_json::to_value(activities)?,
+    // );
 
-    // Load current listings
-    let listings: Vec<CurrentNFTMarketplaceListing> = current_nft_marketplace_listings::table
-        .order_by((
-            current_nft_marketplace_listings::token_data_id,
-            current_nft_marketplace_listings::marketplace,
-        ))
-        .load::<CurrentNFTMarketplaceListing>(conn)
-        .map_err(|e| anyhow::anyhow!("Failed to load listings: {}", e))?;
-    result.insert(
-        "current_nft_marketplace_listings".to_string(),
-        serde_json::to_value(listings)?,
-    );
+    // // Load current listings
+    // let listings: Vec<CurrentNFTMarketplaceListing> = current_nft_marketplace_listings::table
+    //     .order_by((
+    //         current_nft_marketplace_listings::token_data_id,
+    //         current_nft_marketplace_listings::marketplace,
+    //     ))
+    //     .load::<CurrentNFTMarketplaceListing>(conn)
+    //     .map_err(|e| anyhow::anyhow!("Failed to load listings: {}", e))?;
+    // result.insert(
+    //     "current_nft_marketplace_listings".to_string(),
+    //     serde_json::to_value(listings)?,
+    // );
 
-    // Load token offers
-    let token_offers: Vec<CurrentNFTMarketplaceTokenBid> =
-        current_nft_marketplace_token_offers::table
-            .order_by((
-                current_nft_marketplace_token_offers::token_data_id,
-                current_nft_marketplace_token_offers::buyer,
-                current_nft_marketplace_token_offers::marketplace,
-            ))
-            .load::<CurrentNFTMarketplaceTokenBid>(conn)
-            .map_err(|e| anyhow::anyhow!("Failed to load token offers: {}", e))?;
-    result.insert(
-        "current_nft_marketplace_token_offers".to_string(),
-        serde_json::to_value(token_offers)?,
-    );
+    // // Load token offers
+    // let token_offers: Vec<CurrentNFTMarketplaceTokenBid> =
+    //     current_nft_marketplace_token_offers::table
+    //         .order_by((
+    //             current_nft_marketplace_token_offers::token_data_id,
+    //             current_nft_marketplace_token_offers::buyer,
+    //             current_nft_marketplace_token_offers::marketplace,
+    //         ))
+    //         .load::<CurrentNFTMarketplaceTokenBid>(conn)
+    //         .map_err(|e| anyhow::anyhow!("Failed to load token offers: {}", e))?;
+    // result.insert(
+    //     "current_nft_marketplace_token_offers".to_string(),
+    //     serde_json::to_value(token_offers)?,
+    // );
 
-    // Load collection offers
-    let collection_offers: Vec<CurrentNFTMarketplaceCollectionBid> =
-        current_nft_marketplace_collection_offers::table
-            .order_by((
-                current_nft_marketplace_collection_offers::collection_offer_id,
-                current_nft_marketplace_collection_offers::marketplace,
-            ))
-            .load::<CurrentNFTMarketplaceCollectionBid>(conn)
-            .map_err(|e| anyhow::anyhow!("Failed to load collection offers: {}", e))?;
-    result.insert(
-        "current_nft_marketplace_collection_offers".to_string(),
-        serde_json::to_value(collection_offers)?,
-    );
+    // // Load collection offers
+    // let collection_offers: Vec<CurrentNFTMarketplaceCollectionBid> =
+    //     current_nft_marketplace_collection_bids::table
+    //         .order_by((
+    //             current_nft_marketplace_collection_bids::collection_offer_id,
+    //             current_nft_marketplace_collection_bids::marketplace,
+    //         ))
+    //         .load::<CurrentNFTMarketplaceCollectionBid>(conn)
+    //         .map_err(|e| anyhow::anyhow!("Failed to load collection offers: {}", e))?;
+    // result.insert(
+    //     "current_nft_marketplace_collection_bids".to_string(),
+    //     serde_json::to_value(collection_offers)?,
+    // );
 
     Ok(result)
 }

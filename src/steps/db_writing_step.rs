@@ -6,16 +6,12 @@ use crate::{
         commission::Commission,
         contract::Contract,
         listing::Listing,
-        marketplace::{
-            CurrentNFTMarketplaceCollectionBid, CurrentNFTMarketplaceListing,
-            CurrentNFTMarketplaceTokenBid, NftMarketplaceActivity,
-        },
+        marketplace::{BidModel, ListingModel, NftMarketplaceActivity},
         nft::Nft,
     },
     postgres::postgres_utils::{execute_in_chunks, ArcDbPool},
     schema,
 };
-use ahash::HashMap;
 use aptos_indexer_processor_sdk::{
     traits::{async_step::AsyncRunType, AsyncStep, NamedStep, Processable},
     types::transaction_context::TransactionContext,
@@ -24,9 +20,12 @@ use aptos_indexer_processor_sdk::{
 use diesel::{
     pg::{upsert::excluded, Pg},
     query_builder::QueryFragment,
+    query_dsl::methods::FilterDsl,
     ExpressionMethods,
 };
+use std::collections::HashMap;
 use tonic::async_trait;
+use uuid::Uuid;
 
 pub struct DBWritingStep {
     pub db_pool: ArcDbPool,
@@ -40,192 +39,110 @@ impl DBWritingStep {
 
 #[async_trait]
 impl Processable for DBWritingStep {
-    type Input = (
-        Vec<NftMarketplaceActivity>,
-        Vec<CurrentNFTMarketplaceListing>,
-        Vec<CurrentNFTMarketplaceTokenBid>,
-        Vec<CurrentNFTMarketplaceCollectionBid>,
-        Vec<Contract>,
-        Vec<Collection>,
-        Vec<Nft>,
-        Vec<Action>,
-        Vec<Commission>,
-    );
+    type Input = Vec<NftMarketplaceActivity>;
     type Output = ();
     type RunType = AsyncRunType;
 
     async fn process(
         &mut self,
-        input: TransactionContext<(
-            Vec<NftMarketplaceActivity>,
-            Vec<CurrentNFTMarketplaceListing>,
-            Vec<CurrentNFTMarketplaceTokenBid>,
-            Vec<CurrentNFTMarketplaceCollectionBid>,
-            Vec<Contract>,
-            Vec<Collection>,
-            Vec<Nft>,
-            Vec<Action>,
-            Vec<Commission>,
-        )>,
+        input: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<()>>, ProcessorError> {
-        let (
-            activities,
-            listings,
-            token_offers,
-            collection_offers,
-            contracts,
-            collections,
-            nfts,
-            _,
-            commissions,
-        ) = input.data;
+        let activities = input.data;
 
-        let mut deduped_actions: Vec<Action> = activities
-            .into_iter()
-            .map(|activity| {
-                (
-                    (
-                        activity.txn_version,
-                        activity.index,
-                        activity.marketplace.clone(),
-                    ),
-                    activity.into(),
-                )
-            })
-            .collect::<HashMap<_, _>>()
-            .into_values()
-            .collect();
+        let mut deduped_actions: HashMap<i64, Action> = HashMap::new();
+        let mut deduped_bids: HashMap<Option<Uuid>, Bid> = HashMap::new();
+        let mut deduped_listings: HashMap<Option<Uuid>, Listing> = HashMap::new();
 
-        deduped_actions.sort_by(|a, b| a.tx_index.cmp(&b.tx_index));
+        for activity in activities.iter() {
+            let key = activity.get_tx_index();
+            let action: Action = activity.to_owned().into();
+            deduped_actions.insert(key, action);
 
-        let mut deduped_bids: Vec<Bid> = token_offers
-            .into_iter()
-            .map(|offer| {
-                let key = (
-                    offer.token_data_id.clone(),
-                    offer.buyer.clone(),
-                    offer.marketplace.clone(),
-                );
-                (key, offer.into())
-            })
-            .collect::<HashMap<_, _>>()
-            .into_values()
-            .collect();
+            if activity.is_valid_bid() {
+                let bid: Bid = activity.to_owned().into();
+                let key = bid.id;
+                deduped_bids
+                    .entry(key)
+                    .and_modify(|existing: &mut Bid| {
+                        let is_active = bid
+                            .status
+                            .clone()
+                            .map_or(false, |status| status.as_str() == "active");
 
-        let deduped_collection_bids: Vec<Bid> = collection_offers
-            .into_iter()
-            .map(|offer| {
-                let key = (offer.collection_offer_id.clone(), offer.marketplace.clone());
-                (key, offer.into())
-            })
-            .collect::<HashMap<_, _>>()
-            .into_values()
-            .collect();
+                        if let Some(tx_id) = bid.created_tx_id.clone() {
+                            existing.created_tx_id = Some(tx_id);
+                        }
 
-        deduped_bids.extend(deduped_collection_bids);
+                        if let Some(tx_id) = bid.accepted_tx_id.clone() {
+                            existing.accepted_tx_id = Some(tx_id);
+                            if is_active {
+                                existing.status = Some("matched".to_string());
+                            }
+                        }
 
-        let deduped_listings: Vec<Listing> = listings
-            .into_iter()
-            .map(|listing| {
-                let key = (listing.token_data_id.clone(), listing.marketplace.clone());
-                (key, listing.into())
-            })
-            .collect::<HashMap<_, _>>()
-            .into_values()
-            .collect();
+                        if let Some(tx_id) = bid.canceled_tx_id.clone() {
+                            existing.canceled_tx_id = Some(tx_id);
+                            if is_active {
+                                existing.status = Some("cancelled".to_string());
+                            };
+                        }
 
-        let deduped_contracts: Vec<Contract> = contracts
-            .into_iter()
-            .map(|contract| (contract.id.clone(), contract))
-            .collect::<HashMap<_, _>>()
-            .into_values()
-            .collect();
+                        if let Some(receiver) = bid.receiver.clone() {
+                            existing.receiver = Some(receiver);
+                        }
+                    })
+                    .or_insert(bid);
+            }
 
-        let deduped_collections: Vec<Collection> = collections
-            .into_iter()
-            .filter(|collection| collection.id.is_some())
-            .map(|collection| (collection.id.clone(), collection))
-            .collect::<HashMap<_, _>>()
-            .into_values()
-            .collect();
+            if activity.is_valid_listing() {
+                let listing: Listing = activity.to_owned().into();
+                let key = listing.id;
+                deduped_listings
+                    .entry(key)
+                    .and_modify(|existing: &mut Listing| {
+                        let is_listed = listing.listed.unwrap_or(false);
+                        let is_latest = listing
+                            .block_time
+                            .zip(existing.block_time)
+                            .map_or(false, |(current, existing)| current.gt(&existing));
 
-        let deduped_nfts: Vec<Nft> = nfts
-            .into_iter()
-            .filter(|nft| nft.id.is_some())
-            .map(|nft| (nft.id.clone(), nft))
-            .collect::<HashMap<_, _>>()
-            .into_values()
-            .collect();
+                        if is_latest {
+                            existing.block_time = listing.block_time.clone();
+                            existing.listed = listing.listed.clone();
+                            existing.block_height = listing.block_height.clone();
+                            existing.commission_id = listing.commission_id.clone();
+                            existing.nft_id = listing.nft_id.clone();
+                            existing.nonce = listing.nonce.clone();
+                            existing.price = listing.price.clone();
+                            existing.price_str = listing.price_str.clone();
+                            existing.seller = listing.seller.clone();
+                            existing.tx_index = listing.tx_index.clone();
 
-        let deduped_commissions: Vec<Commission> = commissions
-            .into_iter()
-            .map(|commission| (commission.id.clone(), commission))
-            .collect::<HashMap<_, _>>()
-            .into_values()
-            .collect();
+                            if !is_listed {
+                                existing.nonce = None;
+                                existing.price = None;
+                                existing.price_str = None;
+                                existing.seller = None;
+                                existing.tx_index = None;
+                            }
+                        }
+                    })
+                    .or_insert(listing);
+            }
+        }
 
-        let contract_result = execute_in_chunks(
-            self.db_pool.clone(),
-            insert_contracts,
-            &deduped_contracts,
-            200,
-        );
+        let actions: Vec<Action> = deduped_actions.into_values().collect();
+        let bids: Vec<Bid> = deduped_bids.into_values().collect();
+        let listings: Vec<Listing> = deduped_listings.into_values().collect();
 
-        let collection_result = execute_in_chunks(
-            self.db_pool.clone(),
-            insert_collections,
-            &deduped_collections,
-            200,
-        );
+        let action_fut = execute_in_chunks(self.db_pool.clone(), insert_actions, &actions, 200);
+        let bid_fut = execute_in_chunks(self.db_pool.clone(), insert_bids, &bids, 200);
+        let listing_fut = execute_in_chunks(self.db_pool.clone(), insert_listings, &listings, 200);
 
-        let commission_result = execute_in_chunks(
-            self.db_pool.clone(),
-            insert_commissions,
-            &deduped_commissions,
-            200,
-        );
+        let (action_result, bid_result, listing_result) =
+            tokio::join!(action_fut, bid_fut, listing_fut,);
 
-        let action_result =
-            execute_in_chunks(self.db_pool.clone(), insert_actions, &deduped_actions, 200);
-
-        let bid_result = execute_in_chunks(self.db_pool.clone(), insert_bids, &deduped_bids, 200);
-
-        let listing_result = execute_in_chunks(
-            self.db_pool.clone(),
-            insert_listings,
-            &deduped_listings,
-            200,
-        );
-
-        let nft_result = execute_in_chunks(self.db_pool.clone(), insert_nfts, &deduped_nfts, 200);
-
-        let (
-            action_result,
-            bid_result,
-            listing_result,
-            contract_result,
-            collection_result,
-            nft_result,
-            commission_result,
-        ) = tokio::join!(
-            action_result,
-            bid_result,
-            listing_result,
-            contract_result,
-            collection_result,
-            nft_result,
-            commission_result,
-        );
-
-        for result in [
-            action_result,
-            bid_result,
-            listing_result,
-            contract_result,
-            collection_result,
-            nft_result,
-            commission_result,
-        ] {
+        for result in [action_result, bid_result, listing_result] {
             match result {
                 Ok(_) => (),
                 Err(e) => {
@@ -332,7 +249,13 @@ pub fn insert_bids(
     diesel::insert_into(schema::bids::table)
         .values(items_to_insert)
         .on_conflict(id)
-        .do_nothing()
+        .do_update()
+        .set((
+            status.eq(excluded(status)),
+            accepted_tx_id.eq(excluded(accepted_tx_id)),
+            canceled_tx_id.eq(excluded(canceled_tx_id)),
+            receiver.eq(excluded(receiver)),
+        ))
 }
 
 pub fn insert_listings(
@@ -343,5 +266,17 @@ pub fn insert_listings(
     diesel::insert_into(schema::listings::table)
         .values(items_to_insert)
         .on_conflict(id)
-        .do_nothing()
+        .do_update()
+        .set((
+            block_height.eq(excluded(block_height)),
+            block_time.eq(excluded(block_time)),
+            commission_id.eq(excluded(commission_id)),
+            listed.eq(excluded(listed)),
+            nonce.eq(excluded(nonce)),
+            price.eq(excluded(price)),
+            price_str.eq(excluded(price_str)),
+            seller.eq(excluded(seller)),
+            tx_index.eq(excluded(tx_index)),
+        ))
+        .filter(block_time.le(excluded(block_time)))
 }
