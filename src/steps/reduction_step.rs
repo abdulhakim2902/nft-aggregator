@@ -42,6 +42,7 @@ impl Processable for NFTReductionStep {
     type Input = Vec<(
         Vec<NftMarketplaceActivity>,
         HashMap<(i64, String), NftMarketplaceActivity>,
+        HashMap<(i64, String), NftMarketplaceActivity>,
     )>;
     type Output = Vec<NftMarketplaceActivity>;
     type RunType = AsyncRunType;
@@ -51,18 +52,25 @@ impl Processable for NFTReductionStep {
         transactions: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
         for marketplace_activity in transactions.data {
-            let (activities, transfers) = marketplace_activity;
+            let (activities, transfers, deposits) = marketplace_activity;
 
             for mut activity in activities {
                 if let Some(token_data_id) = activity.token_data_id.as_ref() {
                     let key = (activity.txn_version, token_data_id.to_string());
-                    if let Some(mut transfer) = transfers.get(&key).cloned() {
-                        if let Some(buyer) = transfer.buyer.as_ref() {
+
+                    // TOKEN V1 HANDLER
+                    if let Some(deposit) = deposits.get(&key).cloned() {
+                        if let Some(buyer) = deposit.buyer.as_ref() {
                             activity.set_field(MarketplaceField::Buyer, buyer.to_string());
                         }
 
-                        if let Some(seller) = transfer.seller.as_ref() {
-                            activity.set_field(MarketplaceField::Seller, seller.to_string());
+                        self.accumulator.add_activity(activity.to_owned());
+                    }
+
+                    // TOKEN V2 HANDLER
+                    if let Some(mut transfer) = transfers.get(&key).cloned() {
+                        if let Some(buyer) = transfer.buyer.as_ref() {
+                            activity.set_field(MarketplaceField::Buyer, buyer.to_string());
                         }
 
                         if let Some(collection_id) = activity.collection_id.as_ref() {
