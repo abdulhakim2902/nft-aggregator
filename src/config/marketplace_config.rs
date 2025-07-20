@@ -90,6 +90,7 @@ pub enum MarketplaceEventType {
     Mint,
     Burn,
     Transfer,
+    Deposit,
     // Listing events
     List,
     Unlist,

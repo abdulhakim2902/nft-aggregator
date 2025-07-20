@@ -67,9 +67,11 @@ impl EventRemapper {
     ) -> Result<(
         Vec<NftMarketplaceActivity>,
         HashMap<(i64, String), NftMarketplaceActivity>,
+        HashMap<(i64, String), NftMarketplaceActivity>,
     )> {
         let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
         let mut transfers: HashMap<(i64, String), NftMarketplaceActivity> = HashMap::new();
+        let mut deposits: HashMap<(i64, String), NftMarketplaceActivity> = HashMap::new();
 
         if let Some(txn_info) = txn.info.as_ref() {
             let txn_id = format!("0x{}", hex::encode(txn_info.hash.clone()));
@@ -183,7 +185,7 @@ impl EventRemapper {
                             }
                         }
 
-                        // Missing price
+                        // TODO: Missing price
                         if activity.standard_event_type == MarketplaceEventType::Mint
                             && activity.get_field(MarketplaceField::CollectionId).is_none()
                         {
@@ -220,24 +222,42 @@ impl EventRemapper {
                             );
                         }
 
-                        if activity.standard_event_type == MarketplaceEventType::Transfer {
-                            activities.push(activity.clone());
-                        } else if let Some(token_data_id) = activity.token_data_id.as_ref() {
-                            transfers.insert(
-                                (activity.txn_version, token_data_id.to_string()),
-                                activity,
-                            );
+                        match activity.standard_event_type.clone() {
+                            MarketplaceEventType::Deposit => {
+                                activity.set_field(
+                                    MarketplaceField::Buyer,
+                                    standardize_address(&event.account_address),
+                                );
+
+                                if let Some(token_data_id) = activity.token_data_id.as_ref() {
+                                    deposits.insert(
+                                        (activity.txn_version, token_data_id.to_string()),
+                                        activity,
+                                    );
+                                }
+                            },
+                            MarketplaceEventType::Transfer => {
+                                if let Some(token_data_id) = activity.token_data_id.as_ref() {
+                                    transfers.insert(
+                                        (activity.txn_version, token_data_id.to_string()),
+                                        activity,
+                                    );
+                                }
+                            },
+                            _ => {
+                                activities.push(activity);
+                            },
                         }
                     }
                 }
             }
         }
 
-        Ok((activities, transfers))
+        Ok((activities, transfers, deposits))
     }
 
     pub fn get_marketplace_name(&self) -> Option<String> {
-        if self.marketplace_name.as_str() == "token_v2" {
+        if self.marketplace_name.as_str().contains("token_activities") {
             None
         } else {
             Some(self.marketplace_name.clone())
