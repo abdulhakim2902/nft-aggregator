@@ -1,4 +1,7 @@
-use aptos_indexer_processor_sdk::utils::{convert::deserialize_from_string, extract::Aggregator};
+use aptos_indexer_processor_sdk::{
+    aptos_protos::transaction::v1::WriteResource,
+    utils::{convert::deserialize_from_string, extract::Aggregator},
+};
 use bigdecimal::{BigDecimal, ToPrimitive};
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +14,14 @@ pub struct ConcurrentSupply {
 impl ConcurrentSupply {
     pub fn get_current_supply(&self) -> i64 {
         self.current_supply.value.to_i64().unwrap_or_default()
+    }
+}
+
+impl TryFrom<&WriteResource> for ConcurrentSupply {
+    type Error = anyhow::Error;
+
+    fn try_from(write_resource: &WriteResource) -> anyhow::Result<Self> {
+        serde_json::from_str(write_resource.data.as_str()).map_err(anyhow::Error::msg)
     }
 }
 
@@ -30,6 +41,14 @@ impl FixedSupply {
     }
 }
 
+impl TryFrom<&WriteResource> for FixedSupply {
+    type Error = anyhow::Error;
+
+    fn try_from(write_resource: &WriteResource) -> anyhow::Result<Self> {
+        serde_json::from_str(write_resource.data.as_str()).map_err(anyhow::Error::msg)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UnlimitedSupply {
     #[serde(deserialize_with = "deserialize_from_string")]
@@ -41,5 +60,13 @@ pub struct UnlimitedSupply {
 impl UnlimitedSupply {
     pub fn get_current_supply(&self) -> i64 {
         self.current_supply.to_i64().unwrap_or_default()
+    }
+}
+
+impl TryFrom<&WriteResource> for UnlimitedSupply {
+    type Error = anyhow::Error;
+
+    fn try_from(write_resource: &WriteResource) -> anyhow::Result<Self> {
+        serde_json::from_str(write_resource.data.as_str()).map_err(anyhow::Error::msg)
     }
 }

@@ -3,254 +3,199 @@ pub mod royalty;
 pub mod supply;
 pub mod token;
 
-use crate::models::{
-    collection::Collection as PgCollection,
-    commission::Commission,
-    nft::Nft,
-    resources::{
-        collection::Collection,
-        royalty::Royalty,
-        supply::{ConcurrentSupply, FixedSupply, UnlimitedSupply},
-        token::{Token, TokenIdentifiers},
-    },
-    AptosResource,
+use crate::models::resources::{
+    collection::Collection,
+    supply::{ConcurrentSupply, FixedSupply, UnlimitedSupply},
+    token::{Token, TokenIdentifiers},
 };
+use anyhow::{Context, Result};
 use aptos_indexer_processor_sdk::{
-    aptos_protos::transaction::v1::WriteResource, utils::convert::standardize_address,
+    aptos_protos::transaction::v1::{MoveStructTag as MoveStructTagPB, WriteResource},
+    utils::convert::standardize_address,
 };
-use bigdecimal::ToPrimitive;
+use const_format::formatcp;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct ResourceData<T: Clone> {
-    pub address: String,
-    pub data: T,
+pub const TOKEN_ADDR: &str = "0x0000000000000000000000000000000000000000000000000000000000000003";
+pub const TOKEN_V2_ADDR: &str =
+    "0x0000000000000000000000000000000000000000000000000000000000000004";
+
+pub const TYPE_COLLECTION: &str = formatcp!("{TOKEN_V2_ADDR}::collection::Collection");
+pub const TYPE_CONCURRENT_SUPPLY: &str = formatcp!("{TOKEN_V2_ADDR}::collection::ConcurrentSupply");
+pub const TYPE_FIXED_SUPPLY: &str = formatcp!("{TOKEN_V2_ADDR}::collection::FixedSupply");
+pub const TYPE_UNLIMITED_SUPPLY: &str = formatcp!("{TOKEN_V2_ADDR}::collection::UnlimitedSupply");
+
+pub const TYPE_TOKEN_V2: &str = formatcp!("{TOKEN_V2_ADDR}::token::Token");
+pub const TYPE_TOKEN_IDENTIFIERS: &str = formatcp!("{TOKEN_V2_ADDR}::token::TokenIdentifiers");
+
+pub trait Resource {
+    fn type_str() -> &'static str;
 }
 
-pub fn parse_resource_data(resource: &WriteResource) -> AptosResource {
-    match resource.type_str.as_str() {
-        "0x4::collection::Collection" => serde_json::from_str::<Collection>(resource.data.as_str())
-            .map_or(AptosResource::Unknown, |e| {
-                AptosResource::Collection(ResourceData {
-                    address: standardize_address(&resource.address),
-                    data: e,
+pub trait FromWriteResource<'a> {
+    fn from_write_resource(write_resource: &'a WriteResource) -> Result<Option<Self>>
+    where
+        Self: Sized;
+}
+
+impl<'a, T> FromWriteResource<'a> for T
+where
+    T: TryFrom<&'a WriteResource, Error = anyhow::Error> + Resource,
+{
+    fn from_write_resource(write_resource: &'a WriteResource) -> Result<Option<Self>> {
+        if MoveResource::get_outer_type_from_write_resource(write_resource) != Self::type_str() {
+            Ok(None)
+        } else {
+            Ok(Some(write_resource.try_into()?))
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MoveResource {
+    pub txn_version: i64,
+    pub write_set_change_index: i64,
+    pub block_height: i64,
+    pub fun: String,
+    pub resource_type: String,
+    pub resource_address: String,
+    pub module: String,
+    pub generic_type_params: Option<serde_json::Value>,
+    pub data: Option<serde_json::Value>,
+    pub is_deleted: bool,
+    pub state_key_hash: String,
+    pub block_timestamp: chrono::NaiveDateTime,
+}
+
+pub struct MoveStructTag {
+    resource_address: String,
+    pub module: String,
+    pub fun: String,
+    pub generic_type_params: Option<serde_json::Value>,
+}
+
+impl MoveResource {
+    pub fn from_write_resource(
+        write_resource: &WriteResource,
+        write_set_change_index: i64,
+        txn_version: i64,
+        block_height: i64,
+        block_timestamp: chrono::NaiveDateTime,
+    ) -> Result<Option<Self>> {
+        if let Some(move_struct_tag) = write_resource.r#type.as_ref() {
+            let parsed_data = Self::convert_move_struct_tag(move_struct_tag);
+
+            let move_resource = Self {
+                txn_version,
+                block_height,
+                write_set_change_index,
+                fun: parsed_data.fun.clone(),
+                resource_type: write_resource.type_str.clone(),
+                resource_address: standardize_address(&write_resource.address.to_string()),
+                module: parsed_data.module.clone(),
+                generic_type_params: parsed_data.generic_type_params,
+                data: serde_json::from_str(write_resource.data.as_str()).ok(),
+                is_deleted: false,
+                state_key_hash: standardize_address(
+                    hex::encode(write_resource.state_key_hash.as_slice()).as_str(),
+                ),
+                block_timestamp,
+            };
+            Ok(Some(move_resource))
+        } else {
+            Err(anyhow::anyhow!(
+                "MoveStructTag Does Not Exist for {}",
+                txn_version
+            ))
+        }
+    }
+
+    pub fn get_outer_type_from_write_resource(write_resource: &WriteResource) -> String {
+        let move_struct_tag =
+            Self::convert_move_struct_tag(write_resource.r#type.as_ref().unwrap());
+
+        format!(
+            "{}::{}::{}",
+            move_struct_tag.get_address(),
+            move_struct_tag.module,
+            move_struct_tag.fun,
+        )
+    }
+
+    // TODO: Check if this has to be within MoveResource implementation or not
+    pub fn convert_move_struct_tag(struct_tag: &MoveStructTagPB) -> MoveStructTag {
+        MoveStructTag {
+            resource_address: standardize_address(struct_tag.address.as_str()),
+            module: struct_tag.module.to_string(),
+            fun: struct_tag.name.to_string(),
+            generic_type_params: struct_tag
+                .generic_type_params
+                .iter()
+                .map(|move_type| -> Result<Option<serde_json::Value>> {
+                    Ok(Some(
+                        serde_json::to_value(move_type).context("Failed to parse move type")?,
+                    ))
                 })
-            }),
-        "0x4::collection::ConcurrentSupply" => serde_json::from_str::<ConcurrentSupply>(
-            resource.data.as_str(),
-        )
-        .map_or(AptosResource::Unknown, |e| {
-            AptosResource::ConcurrentSupply(ResourceData {
-                address: standardize_address(&resource.address),
-                data: e,
-            })
-        }),
-        "0x4::collection::FixedSupply" => serde_json::from_str::<FixedSupply>(
-            resource.data.as_str(),
-        )
-        .map_or(AptosResource::Unknown, |e| {
-            AptosResource::FixedSupply(ResourceData {
-                address: standardize_address(&resource.address),
-                data: e,
-            })
-        }),
-        "0x4::collection::UnlimitedSupply" => serde_json::from_str::<UnlimitedSupply>(
-            resource.data.as_str(),
-        )
-        .map_or(AptosResource::Unknown, |e| {
-            AptosResource::UnlimitedSupply(ResourceData {
-                address: standardize_address(&resource.address),
-                data: e,
-            })
-        }),
-        "0x4::royalty::Royalty" => serde_json::from_str::<Royalty>(resource.data.as_str()).map_or(
-            AptosResource::Unknown,
-            |e| {
-                AptosResource::Royalty(ResourceData {
-                    address: standardize_address(&resource.address),
-                    data: e,
-                })
-            },
-        ),
-        "0x4::token::Token" => serde_json::from_str::<Token>(resource.data.as_str()).map_or(
-            AptosResource::Unknown,
-            |e| {
-                AptosResource::Token(ResourceData {
-                    address: standardize_address(&resource.address),
-                    data: e,
-                })
-            },
-        ),
-        "0x4::token::TokenIdentifiers" => serde_json::from_str::<TokenIdentifiers>(
-            resource.data.as_str(),
-        )
-        .map_or(AptosResource::Unknown, |e| {
-            AptosResource::TokenIdentifiers(ResourceData {
-                address: standardize_address(&resource.address),
-                data: e,
-            })
-        }),
-        _ => AptosResource::Unknown,
-    }
-}
-
-impl From<ResourceData<Collection>> for PgCollection {
-    fn from(value: ResourceData<Collection>) -> Self {
-        let collection = standardize_address(&value.address);
-        let collection_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection.as_bytes());
-
-        let contract = format!("{}::{}", collection, "non_fungible_tokens");
-        let contract_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract.as_bytes());
-
-        Self {
-            id: Some(collection_id),
-            slug: Some(collection),
-            contract_id: Some(contract_id),
-            supply: None,
-            title: Some(value.data.name),
-            description: Some(value.data.description),
-            cover_url: Some(value.data.uri),
+                .collect::<Result<Option<serde_json::Value>>>()
+                .unwrap_or(None),
         }
     }
 }
 
-impl From<ResourceData<ConcurrentSupply>> for PgCollection {
-    fn from(value: ResourceData<ConcurrentSupply>) -> Self {
-        let collection = standardize_address(&value.address);
-        let collection_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection.as_bytes());
-
-        let contract = format!("{}::{}", collection, "non_fungible_tokens");
-        let contract_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract.as_bytes());
-
-        Self {
-            id: Some(collection_id),
-            slug: Some(collection),
-            contract_id: Some(contract_id),
-            supply: Some(value.data.current_supply.value.to_i64().unwrap_or_default()),
-            title: None,
-            description: None,
-            cover_url: None,
-        }
+impl MoveStructTag {
+    pub fn get_address(&self) -> String {
+        standardize_address(self.resource_address.as_str())
     }
 }
 
-impl From<ResourceData<FixedSupply>> for PgCollection {
-    fn from(value: ResourceData<FixedSupply>) -> Self {
-        let collection = standardize_address(&value.address);
-        let collection_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection.as_bytes());
+pub enum V2TokenResource {
+    ConcurrentySupply(ConcurrentSupply),
+    FixedSupply(FixedSupply),
+    UnlimitedSupply(UnlimitedSupply),
+    TokenIdentifiers(TokenIdentifiers),
+}
 
-        let contract = format!("{}::{}", collection, "non_fungible_tokens");
-        let contract_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract.as_bytes());
+impl V2TokenResource {
+    pub fn from_write_resource(write_resource: &WriteResource) -> Result<Option<Self>> {
+        let type_str = MoveResource::get_outer_type_from_write_resource(write_resource);
+        let result = match type_str.as_str() {
+            TYPE_CONCURRENT_SUPPLY => Some(Self::ConcurrentySupply(write_resource.try_into()?)),
+            TYPE_FIXED_SUPPLY => Some(Self::FixedSupply(write_resource.try_into()?)),
+            TYPE_UNLIMITED_SUPPLY => Some(Self::UnlimitedSupply(write_resource.try_into()?)),
+            TYPE_TOKEN_IDENTIFIERS => Some(Self::TokenIdentifiers(write_resource.try_into()?)),
+            _ => None,
+        };
 
-        Self {
-            id: Some(collection_id),
-            slug: Some(collection),
-            contract_id: Some(contract_id),
-            supply: Some(value.data.current_supply.to_i64().unwrap_or_default()),
-            title: None,
-            description: None,
-            cover_url: None,
-        }
+        Ok(result)
     }
 }
 
-impl From<ResourceData<UnlimitedSupply>> for PgCollection {
-    fn from(value: ResourceData<UnlimitedSupply>) -> Self {
-        let collection = standardize_address(&value.address);
-        let collection_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection.as_bytes());
-
-        let contract = format!("{}::{}", collection, "non_fungible_tokens");
-        let contract_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract.as_bytes());
-
-        Self {
-            id: Some(collection_id),
-            slug: Some(collection),
-            contract_id: Some(contract_id),
-            supply: Some(value.data.current_supply.to_i64().unwrap_or_default()),
-            title: None,
-            description: None,
-            cover_url: None,
-        }
+impl Resource for Collection {
+    fn type_str() -> &'static str {
+        TYPE_COLLECTION
     }
 }
 
-impl From<ResourceData<Token>> for PgCollection {
-    fn from(value: ResourceData<Token>) -> Self {
-        let collection = standardize_address(&value.data.collection.inner);
-        let collection_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection.as_bytes());
-
-        let contract = format!("{}::{}", collection, "non_fungible_tokens");
-        let contract_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract.as_bytes());
-
-        Self {
-            id: Some(collection_id),
-            slug: Some(collection),
-            contract_id: Some(contract_id),
-            supply: None,
-            title: None,
-            description: None,
-            cover_url: None,
-        }
+impl Resource for ConcurrentSupply {
+    fn type_str() -> &'static str {
+        TYPE_CONCURRENT_SUPPLY
     }
 }
 
-impl From<ResourceData<Token>> for Nft {
-    fn from(value: ResourceData<Token>) -> Self {
-        let collection = standardize_address(&value.data.collection.inner);
-        let token = standardize_address(&value.address);
-
-        let collection_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, collection.as_bytes());
-        let token_id = Uuid::new_v5(
-            &Uuid::NAMESPACE_DNS,
-            format!("{}::{}", collection, token).as_bytes(),
-        );
-
-        let contract = format!("{}::{}", collection, "non_fungible_tokens");
-        let contract_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract.as_bytes());
-
-        Self {
-            id: Some(token_id),
-            media_url: Some(value.data.uri),
-            name: None,
-            owner: None,
-            contract_id: Some(contract_id),
-            token_id: Some(token),
-            collection_id: Some(collection_id),
-            burned: None,
-            latest_tx_index: 0,
-        }
+impl Resource for FixedSupply {
+    fn type_str() -> &'static str {
+        TYPE_FIXED_SUPPLY
     }
 }
 
-impl From<ResourceData<TokenIdentifiers>> for Nft {
-    fn from(value: ResourceData<TokenIdentifiers>) -> Self {
-        let token = standardize_address(&value.address);
-
-        Self {
-            id: None,
-            media_url: None,
-            name: Some(value.data.get_name()),
-            owner: None,
-            contract_id: None,
-            token_id: Some(token),
-            collection_id: None,
-            burned: None,
-            latest_tx_index: 0,
-        }
+impl Resource for TokenIdentifiers {
+    fn type_str() -> &'static str {
+        TYPE_TOKEN_IDENTIFIERS
     }
 }
 
-impl From<ResourceData<Royalty>> for Commission {
-    fn from(value: ResourceData<Royalty>) -> Self {
-        let collection = standardize_address(&value.address);
-        let contract = format!("{}::{}", collection, "non_fungible_tokens");
-        let contract_id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, contract.as_bytes());
-
-        Self {
-            id: None,
-            royalty: Some(value.data.get_royalty()),
-            contract_id: Some(contract_id),
-        }
+impl Resource for Token {
+    fn type_str() -> &'static str {
+        TYPE_TOKEN_V2
     }
 }

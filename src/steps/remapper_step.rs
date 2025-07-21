@@ -1,7 +1,11 @@
 use super::remappers::resource_remapper::ResourceMapper;
 use crate::{
-    config::marketplace_config::NFTMarketplaceConfig, models::marketplace::NftMarketplaceActivity,
-    steps::remappers::event_remapper::EventRemapper,
+    config::marketplace_config::NFTMarketplaceConfig,
+    models::{
+        db::{collection::Collection, contract::Contract, nft::Nft},
+        marketplace::NftMarketplaceActivity,
+    },
+    steps::{remappers::event_remapper::EventRemapper, token::token_processor_helper::parse_token},
 };
 use anyhow::Result;
 use aptos_indexer_processor_sdk::{
@@ -11,11 +15,11 @@ use aptos_indexer_processor_sdk::{
     utils::errors::ProcessorError,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 pub struct Remapper {
     event_remapper: Arc<EventRemapper>,
-    resource_remapper: Arc<ResourceMapper>,
+    _resource_remapper: Arc<ResourceMapper>,
 }
 
 pub struct ProcessStep
@@ -31,11 +35,11 @@ impl ProcessStep {
             .par_iter()
             .map(|config| {
                 let event_remapper: Arc<EventRemapper> = EventRemapper::new(&config)?;
-                let resource_remapper: Arc<ResourceMapper> = ResourceMapper::new(&config)?;
+                let _resource_remapper: Arc<ResourceMapper> = ResourceMapper::new(&config)?;
 
                 Ok(Remapper {
                     event_remapper,
-                    resource_remapper,
+                    _resource_remapper,
                 })
             })
             .collect::<anyhow::Result<Vec<Remapper>>>()
@@ -52,18 +56,22 @@ impl ProcessStep {
 #[async_trait::async_trait]
 impl Processable for ProcessStep {
     type Input = Vec<Transaction>;
-    type Output = Vec<(
-        Vec<NftMarketplaceActivity>,
-        HashMap<(i64, String), NftMarketplaceActivity>,
-        HashMap<(i64, String), NftMarketplaceActivity>,
-        HashMap<String, HashMap<String, String>>,
-    )>;
+    type Output = (
+        Vec<Contract>,
+        Vec<Collection>,
+        Vec<Nft>,
+        Vec<Vec<NftMarketplaceActivity>>,
+    );
     type RunType = AsyncRunType;
 
     async fn process(
         &mut self,
         transactions: TransactionContext<Vec<Transaction>>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
+        // Handle NFT Metadata and activity
+        let (token_activities, contracts, collections, nfts) = parse_token(&transactions.data);
+
+        // Handle NFT Marketplace Activity
         let results = self
             .remappers
             .par_iter()
@@ -73,14 +81,9 @@ impl Processable for ProcessStep {
                     .par_iter()
                     .map(|transaction| {
                         let event_remapper = this.event_remapper.clone();
-                        let resource_remapper = this.resource_remapper.clone();
+                        let activities = event_remapper.remap_events(transaction.clone())?;
 
-                        let (activities, transfers, deposits) =
-                            event_remapper.remap_events(transaction.clone())?;
-                        let resource_updates =
-                            resource_remapper.remap_resources(transaction.clone())?;
-
-                        Ok((activities, transfers, deposits, resource_updates))
+                        Ok(activities)
                     })
                     .collect::<anyhow::Result<Vec<_>>>();
 
@@ -93,50 +96,19 @@ impl Processable for ProcessStep {
 
         let mut marketplace_activities = Vec::new();
         for items in results.iter() {
-            let (
-                mut all_activities,
-                mut all_transfer_updates,
-                mut all_deposit_updates,
-                mut all_resource_updates,
-            ) = (
-                Vec::new(),
-                HashMap::<(i64, String), NftMarketplaceActivity>::new(),
-                HashMap::<(i64, String), NftMarketplaceActivity>::new(),
-                HashMap::<String, HashMap<String, String>>::new(),
-            );
+            let mut all_activities = Vec::new();
 
-            for (activities, transfer_updates, deposit_updates, resource_updates) in items.clone() {
+            for activities in items.clone() {
                 all_activities.extend(activities);
-
-                // Merge transfer activities by key
-                transfer_updates.into_iter().for_each(|(key, value)| {
-                    all_transfer_updates.insert(key, value);
-                });
-
-                // Merge transfer activities by key
-                deposit_updates.into_iter().for_each(|(key, value)| {
-                    all_deposit_updates.insert(key, value);
-                });
-
-                // Merge resource_updates by key
-                resource_updates.into_iter().for_each(|(key, value_map)| {
-                    all_resource_updates
-                        .entry(key)
-                        .or_default()
-                        .extend(value_map);
-                });
             }
 
-            marketplace_activities.push((
-                all_activities,
-                all_transfer_updates,
-                all_deposit_updates,
-                all_resource_updates,
-            ));
+            marketplace_activities.push(all_activities);
         }
 
+        marketplace_activities.push(token_activities);
+
         Ok(Some(TransactionContext {
-            data: marketplace_activities,
+            data: (contracts, collections, nfts, marketplace_activities),
             metadata: transactions.metadata,
         }))
     }

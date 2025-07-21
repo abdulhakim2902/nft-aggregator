@@ -2,6 +2,7 @@ use aptos_protos::util::timestamp::Timestamp;
 use uuid::Uuid;
 
 pub mod marketplace_resource_utils;
+pub mod object_utils;
 
 pub const MAX_TIMESTAMP_SECS: i64 = 253_402_300_799;
 

@@ -1,9 +1,6 @@
 use crate::{
     config::marketplace_config::MarketplaceEventType,
-    models::{
-        action::Action, bid::Bid, collection::Collection, contract::Contract, listing::Listing,
-        nft::Nft,
-    },
+    models::db::{action::Action, bid::Bid, collection::Collection, listing::Listing, nft::Nft},
     utils::generate_uuid_from_str,
 };
 use aptos_indexer_processor_sdk::aptos_indexer_transaction_stream::utils::time::parse_timestamp_secs;
@@ -158,17 +155,6 @@ impl From<NftMarketplaceActivity> for Nft {
     }
 }
 
-impl From<NftMarketplaceActivity> for Contract {
-    fn from(value: NftMarketplaceActivity) -> Self {
-        Self {
-            id: value.get_contract_id(),
-            type_: Some("non_fungible_tokens".to_string()),
-            name: None,
-            key: value.get_contract_key(),
-        }
-    }
-}
-
 impl NftMarketplaceActivity {
     pub fn get_id(&self) -> Uuid {
         generate_uuid_from_str(&self.get_tx_index().to_string())
@@ -185,6 +171,12 @@ impl NftMarketplaceActivity {
             .map(|(contract_address, marketplace)| {
                 generate_uuid_from_str(&format!("{}::{}", contract_address, marketplace))
             })
+    }
+
+    fn get_contract_id(&self) -> Option<Uuid> {
+        self.collection_id
+            .clone()
+            .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
     }
 }
 
@@ -490,33 +482,6 @@ impl NftModel for NftMarketplaceActivity {
     }
 }
 
-impl ContractModel for NftMarketplaceActivity {
-    fn get_contract_id(&self) -> Option<Uuid> {
-        self.collection_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
-    }
-
-    fn get_contract_key(&self) -> Option<String> {
-        if let Some(token_version) = self.token_version.as_ref() {
-            match token_version.clone() {
-                TokenVersion::V1 => self
-                    .collection_name
-                    .clone()
-                    .zip(self.creator_address.clone())
-                    .map(|(name, creator)| format!("{}::{}", creator, name.replace(" ", "%20"))),
-                TokenVersion::V2 => self.collection_id.clone(),
-            }
-        } else {
-            None
-        }
-    }
-
-    fn is_valid_contract(&self) -> bool {
-        self.get_contract_id().is_some()
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Display, EnumString)]
 #[strum(serialize_all = "snake_case")]
 pub enum MarketplaceField {
@@ -579,12 +544,6 @@ pub trait NftModel {
     fn get_token_id(&self) -> Option<String>;
     fn get_owner(&self) -> Option<String>;
     fn is_valid_nft(&self) -> bool;
-}
-
-pub trait ContractModel {
-    fn get_contract_id(&self) -> Option<Uuid>;
-    fn get_contract_key(&self) -> Option<String>;
-    fn is_valid_contract(&self) -> bool;
 }
 
 #[cfg(test)]

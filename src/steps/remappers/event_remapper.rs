@@ -3,9 +3,7 @@ use crate::{
         EventFieldRemappings, EventType, MarketplaceEventType, NFTMarketplaceConfig,
     },
     models::{
-        marketplace::{
-            BidModel, MarketplaceField, MarketplaceModel, NftMarketplaceActivity, TokenVersion,
-        },
+        marketplace::{BidModel, MarketplaceField, MarketplaceModel, NftMarketplaceActivity},
         EventModel,
     },
     steps::{remappers::TableType, HashableJsonPath},
@@ -63,24 +61,14 @@ impl EventRemapper {
     /// 3. Creates marketplace activity for event
     /// 4. Updates current models (listings, token offers, collection offers)
     /// 5. Generate necessary id fields for models that don't have an id if possible
-    pub fn remap_events(
-        &self,
-        txn: Transaction,
-    ) -> Result<(
-        Vec<NftMarketplaceActivity>,
-        HashMap<(i64, String), NftMarketplaceActivity>,
-        HashMap<(i64, String), NftMarketplaceActivity>,
-    )> {
+    pub fn remap_events(&self, txn: Transaction) -> Result<Vec<NftMarketplaceActivity>> {
         let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
-        let mut transfers: HashMap<(i64, String), NftMarketplaceActivity> = HashMap::new();
-        let mut deposits: HashMap<(i64, String), NftMarketplaceActivity> = HashMap::new();
 
         if let Some(txn_info) = txn.info.as_ref() {
             let txn_id = format!("0x{}", hex::encode(txn_info.hash.clone()));
             let txn_ts =
                 parse_timestamp(txn.timestamp.as_ref().unwrap(), txn.version as i64).naive_utc();
 
-            let sender = self.get_sender(&txn);
             let events = self.get_events(Arc::new(txn))?;
 
             for event in events.iter() {
@@ -106,7 +94,6 @@ impl EventRemapper {
                             raw_event_type: event.event_type.to_string(),
                             json_data: serde_json::to_value(&event).unwrap(),
                             standard_event_type: event_type.clone(),
-                            token_version: Some(TokenVersion::V2),
                             ..Default::default()
                         };
 
@@ -184,31 +171,7 @@ impl EventRemapper {
                             );
 
                             if let Some(token_data_id) = token_data_id {
-                                activity.token_version = Some(TokenVersion::V1);
                                 activity.set_field(MarketplaceField::TokenDataId, token_data_id);
-                            }
-                        }
-
-                        // TODO: Missing price
-                        if activity.standard_event_type == MarketplaceEventType::Mint
-                            && activity.get_field(MarketplaceField::CollectionId).is_none()
-                        {
-                            activity.set_field(
-                                MarketplaceField::CollectionId,
-                                standardize_address(&event.account_address),
-                            );
-                        }
-
-                        if activity.standard_event_type == MarketplaceEventType::Burn {
-                            if let Some(sender) = sender.as_ref() {
-                                activity.set_field(MarketplaceField::Seller, sender.to_string());
-                            }
-
-                            if activity.get_field(MarketplaceField::CollectionId).is_none() {
-                                activity.set_field(
-                                    MarketplaceField::CollectionId,
-                                    standardize_address(&event.account_address),
-                                );
                             }
                         }
 
@@ -226,38 +189,13 @@ impl EventRemapper {
                             );
                         }
 
-                        match activity.standard_event_type.clone() {
-                            MarketplaceEventType::Deposit => {
-                                activity.set_field(
-                                    MarketplaceField::Buyer,
-                                    standardize_address(&event.account_address),
-                                );
-
-                                if let Some(token_data_id) = activity.token_data_id.as_ref() {
-                                    deposits.insert(
-                                        (activity.txn_version, token_data_id.to_string()),
-                                        activity,
-                                    );
-                                }
-                            },
-                            MarketplaceEventType::Transfer => {
-                                if let Some(token_data_id) = activity.token_data_id.as_ref() {
-                                    transfers.insert(
-                                        (activity.txn_version, token_data_id.to_string()),
-                                        activity,
-                                    );
-                                }
-                            },
-                            _ => {
-                                activities.push(activity);
-                            },
-                        }
+                        activities.push(activity);
                     }
                 }
             }
         }
 
-        Ok((activities, transfers, deposits))
+        Ok(activities)
     }
 
     pub fn get_marketplace_name(&self) -> Option<String> {
@@ -286,28 +224,6 @@ impl EventRemapper {
             _ => &default,
         };
         EventModel::from_events(raw_events, txn_version, block_height, txn_ts)
-    }
-
-    fn get_sender(&self, transation: &Transaction) -> Option<String> {
-        if let Some(txn_data) = transation.txn_data.as_ref() {
-            match txn_data {
-                TxnData::User(inner) => inner
-                    .request
-                    .clone()
-                    .map(|req| standardize_address(&req.sender)),
-                _ => None,
-            }
-        } else {
-            None
-        }
-        // transation.txn_data(|txn_data| {
-        //     match txn_data {
-        //         TxnData::User(inner) => {
-        //             inner.request.
-        //         },
-        //         _ => {}
-        //     }
-        // })
     }
 }
 

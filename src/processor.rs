@@ -5,7 +5,6 @@ use crate::{
         processor_status_saver_step::{
             get_end_version, get_starting_version, PostgresProcessorStatusSaver,
         },
-        reduction_step::NFTReductionStep,
         remapper_step::ProcessStep,
     },
     MIGRATIONS,
@@ -98,7 +97,6 @@ impl ProcessorTrait for Processor {
         let nft_marketplace_configs = self.config.nft_marketplace_configs.clone();
 
         let process = ProcessStep::new(nft_marketplace_configs.clone())?;
-        let nft_reduction = NFTReductionStep::new();
         let db_writing = DBWritingStep::new(self.db_pool.clone());
         let version_tracker = VersionTrackerStep::new(
             PostgresProcessorStatusSaver::new(self.config.clone(), self.db_pool.clone()),
@@ -110,7 +108,6 @@ impl ProcessorTrait for Processor {
             transaction_stream.into_runnable_step(),
         )
         .connect_to(process.into_runnable_step(), channel_size)
-        .connect_to(nft_reduction.into_runnable_step(), channel_size)
         .connect_to(db_writing.into_runnable_step(), channel_size)
         .connect_to(version_tracker.into_runnable_step(), channel_size)
         .end_and_return_output_receiver(channel_size);
