@@ -17,6 +17,5 @@ CREATE TABLE IF NOT EXISTS nfts (
   -- Add chain state
   -- Add asset name
   burned BOOLEAN DEFAULT false,
-  latest_tx_index BIGINT NOT NULL,
   PRIMARY KEY (id)
 );

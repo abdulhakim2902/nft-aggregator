@@ -36,12 +36,7 @@ impl DBWritingStep {
 
 #[async_trait]
 impl Processable for DBWritingStep {
-    type Input = (
-        Vec<Contract>,
-        Vec<Collection>,
-        Vec<Nft>,
-        Vec<Vec<NftMarketplaceActivity>>,
-    );
+    type Input = (Vec<Collection>, Vec<Nft>, Vec<Vec<NftMarketplaceActivity>>);
     type Output = ();
     type RunType = AsyncRunType;
 
@@ -49,7 +44,7 @@ impl Processable for DBWritingStep {
         &mut self,
         input: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<()>>, ProcessorError> {
-        let (mut contracts, collections, nfts, marketplace_activities) = input.data;
+        let (collections, nfts, marketplace_activities) = input.data;
 
         let mut deduped_actions: HashMap<i64, Action> = HashMap::new();
         let mut deduped_bids: HashMap<Option<Uuid>, Bid> = HashMap::new();
@@ -143,9 +138,7 @@ impl Processable for DBWritingStep {
         let actions: Vec<Action> = deduped_actions.into_values().collect();
         let bids: Vec<Bid> = deduped_bids.into_values().collect();
         let listings: Vec<Listing> = deduped_listings.into_values().collect();
-        let marketplace_contracts: Vec<Contract> = deduped_contracts.into_values().collect();
-
-        contracts.extend(marketplace_contracts);
+        let contracts: Vec<Contract> = deduped_contracts.into_values().collect();
 
         let action_fut = execute_in_chunks(self.db_pool.clone(), insert_actions, &actions, 200);
         let bid_fut = execute_in_chunks(self.db_pool.clone(), insert_bids, &bids, 200);
@@ -231,6 +224,9 @@ pub fn insert_collections(
             supply.eq(excluded(supply)),
             description.eq(excluded(description)),
             cover_url.eq(excluded(cover_url)),
+            contract_id.eq(excluded(contract_id)),
+            slug.eq(excluded(slug)),
+            title.eq(excluded(title)),
         ))
 }
 
@@ -310,13 +306,14 @@ pub fn insert_nfts(
         .do_update()
         .set((
             collection_id.eq(excluded(collection_id)),
+            token_id.eq(excluded(token_id)),
             contract_id.eq(excluded(contract_id)),
             owner.eq(excluded(owner)),
-            burned.eq(excluded(burned)),
-            latest_tx_index.eq(excluded(latest_tx_index)),
+            media_url.eq(excluded(media_url)),
+            name.eq(excluded(name)),
         ))
-        .filter(latest_tx_index.le(excluded(latest_tx_index)))
 }
 
 // TODO: update nft name and media_url, add a new function
 // TODO: update supply, description, cover_url
+// TODO: Update nfts if the actions is burned

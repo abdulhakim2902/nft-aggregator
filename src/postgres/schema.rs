@@ -141,7 +141,6 @@ diesel::table! {
         #[max_length = 128]
         token_id -> Nullable<Varchar>,
         burned -> Nullable<Bool>,
-        latest_tx_index -> Int8,
     }
 }
 

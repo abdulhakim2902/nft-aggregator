@@ -1,8 +1,5 @@
 use crate::{
-    models::{
-        db::contract::Contract,
-        resources::{collection::Collection as CollectionResourceData, FromWriteResource},
-    },
+    models::resources::{collection::Collection as CollectionResourceData, FromWriteResource},
     schema::collections,
     utils::{generate_uuid_from_str, object_utils::ObjectAggregatedData},
 };
@@ -41,7 +38,7 @@ impl Collection {
     pub fn get_from_write_resource(
         wr: &WriteResource,
         object_metadata: &AHashMap<String, ObjectAggregatedData>,
-    ) -> Result<Option<(Self, Contract)>> {
+    ) -> Result<Option<Self>> {
         if let Some(inner) = CollectionResourceData::from_write_resource(wr)? {
             let address = standardize_address(&wr.address);
             let contract_id = generate_uuid_from_str(&format!("{}::non_fungible_tokens", address));
@@ -53,13 +50,6 @@ impl Collection {
                 supply: None,
                 cover_url: Some(inner.uri),
                 contract_id: Some(contract_id.clone()),
-            };
-
-            let contract = Contract {
-                id: Some(contract_id),
-                type_: Some("non_fungible_tokens".to_string()),
-                name: None,
-                key: Some(address.clone()),
             };
 
             if let Some(object) = object_metadata.get(&address) {
@@ -75,9 +65,7 @@ impl Collection {
                     collection.supply = concurrent_supply.current_supply.value.to_i64()
                 }
 
-                // TODO: Collection properties
-
-                return Ok(Some((collection, contract)));
+                return Ok(Some(collection));
             }
         }
 

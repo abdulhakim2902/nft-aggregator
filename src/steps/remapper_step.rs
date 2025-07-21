@@ -2,7 +2,7 @@ use super::remappers::resource_remapper::ResourceMapper;
 use crate::{
     config::marketplace_config::NFTMarketplaceConfig,
     models::{
-        db::{collection::Collection, contract::Contract, nft::Nft},
+        db::{collection::Collection, nft::Nft},
         marketplace::NftMarketplaceActivity,
     },
     steps::{remappers::event_remapper::EventRemapper, token::token_processor_helper::parse_token},
@@ -56,12 +56,7 @@ impl ProcessStep {
 #[async_trait::async_trait]
 impl Processable for ProcessStep {
     type Input = Vec<Transaction>;
-    type Output = (
-        Vec<Contract>,
-        Vec<Collection>,
-        Vec<Nft>,
-        Vec<Vec<NftMarketplaceActivity>>,
-    );
+    type Output = (Vec<Collection>, Vec<Nft>, Vec<Vec<NftMarketplaceActivity>>);
     type RunType = AsyncRunType;
 
     async fn process(
@@ -69,7 +64,7 @@ impl Processable for ProcessStep {
         transactions: TransactionContext<Vec<Transaction>>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
         // Handle NFT Metadata and activity
-        let (token_activities, contracts, collections, nfts) = parse_token(&transactions.data);
+        let (token_activities, collections, nfts) = parse_token(&transactions.data);
 
         // Handle NFT Marketplace Activity
         let results = self
@@ -108,7 +103,7 @@ impl Processable for ProcessStep {
         marketplace_activities.push(token_activities);
 
         Ok(Some(TransactionContext {
-            data: (contracts, collections, nfts, marketplace_activities),
+            data: (collections, nfts, marketplace_activities),
             metadata: transactions.metadata,
         }))
     }

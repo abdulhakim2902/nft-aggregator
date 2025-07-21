@@ -1,10 +1,7 @@
 use crate::{
-    models::{
-        db::contract::Contract,
-        resources::{
-            token::{Token as TokenResourceData, TokenWriteSet},
-            FromWriteResource,
-        },
+    models::resources::{
+        token::{Token as TokenResourceData, TokenWriteSet},
+        FromWriteResource,
     },
     schema::nfts,
     utils::{generate_uuid_from_str, object_utils::ObjectAggregatedData},
@@ -34,48 +31,38 @@ pub struct Nft {
     pub collection_id: Option<Uuid>,
     pub contract_id: Option<Uuid>,
     pub burned: Option<bool>,
-    pub latest_tx_index: i64,
 }
 
 impl Nft {
-    pub fn set_name(mut self, value: &str) -> Self {
-        self.name = Some(value.to_string());
-        self
-    }
-
-    pub fn set_is_burned(mut self, burned: bool) -> Self {
-        self.burned = Some(burned);
-        self
-    }
-
-    pub fn set_owner(mut self, owner: Option<String>) -> Self {
-        self.owner = owner;
-        self
-    }
-
     pub fn get_from_write_resource(
         wr: &WriteResource,
         object_metadata: &AHashMap<String, ObjectAggregatedData>,
     ) -> Result<Option<Self>> {
         if let Some(inner) = TokenResourceData::from_write_resource(wr)? {
             let token_data_id = standardize_address(&wr.address);
+            let contract_id = generate_uuid_from_str(&format!(
+                "{}::non_fungible_tokens",
+                inner.get_collection_address()
+            ));
+
             let mut nft = Nft {
                 id: Some(generate_uuid_from_str(&token_data_id)),
                 owner: None,
                 token_id: Some(token_data_id.clone()),
                 collection_id: Some(inner.get_collection_id()),
-                contract_id: Some(generate_uuid_from_str(&format!(
-                    "{}::non_fungible_tokens",
-                    inner.get_collection_address()
-                ))),
+                contract_id: Some(contract_id),
                 burned: None,
-                latest_tx_index: 0,
                 name: Some(inner.name),
                 media_url: Some(inner.uri),
             };
 
-            if let Some(object) = object_metadata.get(&token_data_id) {
-                if let Some(token_identifier) = object.token_identifiers.as_ref() {
+            if let Some(object_data) = object_metadata.get(&token_data_id) {
+                let object_core = object_data.object.object_core.clone();
+                let owner_address = object_core.get_owner_address();
+
+                nft.owner = Some(owner_address);
+
+                if let Some(token_identifier) = object_data.token_identifiers.as_ref() {
                     nft.name = Some(token_identifier.name.value.clone());
                 }
 
@@ -91,7 +78,7 @@ impl Nft {
     pub fn get_from_write_table_item(
         table_item: &WriteTableItem,
         txn_version: i64,
-    ) -> Result<Option<(Contract, Self)>> {
+    ) -> Result<Option<Self>> {
         if let Some(table_item_data) = table_item.data.as_ref() {
             let maybe_token_data = match TokenWriteSet::from_table_item_type(
                 &table_item_data.value_type,
@@ -120,18 +107,6 @@ impl Nft {
                         "{}::non_fungible_tokens",
                         token_data_id_struct.get_collection_id()
                     ));
-                    let contract_key = format!(
-                        "{}::{}",
-                        token_data_id_struct.collection,
-                        token_data_id_struct.name.replace(" ", "%20")
-                    );
-
-                    let contract = Contract {
-                        id: Some(contract_id.clone()),
-                        name: None,
-                        type_: Some("non_fungible_tokens".to_string()),
-                        key: Some(contract_key),
-                    };
 
                     let nft = Nft {
                         id: Some(nft_id),
@@ -139,13 +114,12 @@ impl Nft {
                         owner: None,
                         collection_id: Some(collection_id),
                         burned: None,
-                        latest_tx_index: txn_version,
                         name: Some(token_data.name),
                         media_url: Some(token_data.uri),
                         contract_id: Some(contract_id),
                     };
 
-                    return Ok(Some((contract, nft)));
+                    return Ok(Some(nft));
                 }
             }
         }

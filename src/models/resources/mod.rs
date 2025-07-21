@@ -3,10 +3,13 @@ pub mod royalty;
 pub mod supply;
 pub mod token;
 
-use crate::models::resources::{
-    collection::Collection,
-    supply::{ConcurrentSupply, FixedSupply, UnlimitedSupply},
-    token::{Token, TokenIdentifiers},
+use crate::{
+    models::resources::{
+        collection::Collection,
+        supply::{ConcurrentSupply, FixedSupply, UnlimitedSupply},
+        token::{Token, TokenIdentifiers},
+    },
+    utils::object_utils::ObjectCore,
 };
 use anyhow::{Context, Result};
 use aptos_indexer_processor_sdk::{
@@ -16,10 +19,12 @@ use aptos_indexer_processor_sdk::{
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 
+pub const COIN_ADDR: &str = "0x0000000000000000000000000000000000000000000000000000000000000001";
 pub const TOKEN_ADDR: &str = "0x0000000000000000000000000000000000000000000000000000000000000003";
 pub const TOKEN_V2_ADDR: &str =
     "0x0000000000000000000000000000000000000000000000000000000000000004";
 
+pub const TYPE_OBJECT_CORE: &str = formatcp!("{COIN_ADDR}::object::ObjectCore");
 pub const TYPE_COLLECTION: &str = formatcp!("{TOKEN_V2_ADDR}::collection::Collection");
 pub const TYPE_CONCURRENT_SUPPLY: &str = formatcp!("{TOKEN_V2_ADDR}::collection::ConcurrentSupply");
 pub const TYPE_FIXED_SUPPLY: &str = formatcp!("{TOKEN_V2_ADDR}::collection::FixedSupply");
@@ -153,6 +158,8 @@ pub enum V2TokenResource {
     FixedSupply(FixedSupply),
     UnlimitedSupply(UnlimitedSupply),
     TokenIdentifiers(TokenIdentifiers),
+    Token(Token),
+    ObjectCore(ObjectCore),
 }
 
 impl V2TokenResource {
@@ -197,5 +204,11 @@ impl Resource for TokenIdentifiers {
 impl Resource for Token {
     fn type_str() -> &'static str {
         TYPE_TOKEN_V2
+    }
+}
+
+impl Resource for ObjectCore {
+    fn type_str() -> &'static str {
+        TYPE_OBJECT_CORE
     }
 }

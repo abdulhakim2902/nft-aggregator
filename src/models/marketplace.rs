@@ -1,9 +1,15 @@
 use crate::{
     config::marketplace_config::MarketplaceEventType,
-    models::db::{action::Action, bid::Bid, collection::Collection, listing::Listing, nft::Nft},
-    utils::generate_uuid_from_str,
+    models::db::{action::Action, bid::Bid, listing::Listing},
+    steps::token::token_utils::V2TokenEvent,
+    utils::{generate_uuid_from_str, object_utils::ObjectAggregatedData},
 };
-use aptos_indexer_processor_sdk::aptos_indexer_transaction_stream::utils::time::parse_timestamp_secs;
+use ahash::AHashMap;
+use anyhow::Result;
+use aptos_indexer_processor_sdk::{
+    aptos_indexer_transaction_stream::utils::time::parse_timestamp_secs,
+    aptos_protos::transaction::v1::Event, utils::convert::standardize_address,
+};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
@@ -18,12 +24,6 @@ pub const CURRENT_NFT_MARKETPLACE_TOKEN_BIDS_TABLE_NAME: &str =
     "current_nft_marketplace_token_bids";
 pub const CURRENT_NFT_MARKETPLACE_COLLECTION_BIDS_TABLE_NAME: &str =
     "current_nft_marketplace_collection_bids";
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum TokenVersion {
-    V1,
-    V2,
-}
 
 /**
  * NftMarketplaceActivity is the main model for storing NFT marketplace activities.
@@ -53,7 +53,6 @@ pub struct NftMarketplaceActivity {
     pub block_height: i64,
     pub expiration_time: Option<NaiveDateTime>,
     pub bid_key: Option<i64>,
-    pub token_version: Option<TokenVersion>,
 }
 
 impl From<NftMarketplaceActivity> for Action {
@@ -124,39 +123,8 @@ impl From<NftMarketplaceActivity> for Listing {
     }
 }
 
-impl From<NftMarketplaceActivity> for Collection {
-    fn from(value: NftMarketplaceActivity) -> Self {
-        Self {
-            id: value.get_collection_id(),
-            contract_id: value.get_contract_id(),
-            title: value.get_field(MarketplaceField::CollectionName),
-            slug: value.get_collection_slug(),
-            supply: None,
-            description: None,
-            cover_url: None,
-        }
-    }
-}
-
-// TODO: Handle nft mutation
-impl From<NftMarketplaceActivity> for Nft {
-    fn from(value: NftMarketplaceActivity) -> Self {
-        Self {
-            id: value.get_nft_id(),
-            collection_id: value.get_collection_id(),
-            contract_id: value.get_contract_id(),
-            name: value.get_field(MarketplaceField::TokenName),
-            owner: value.get_owner(),
-            latest_tx_index: value.get_tx_index(),
-            burned: Some(value.standard_event_type == MarketplaceEventType::Burn),
-            token_id: value.get_token_id(),
-            media_url: None,
-        }
-    }
-}
-
 impl NftMarketplaceActivity {
-    pub fn get_id(&self) -> Uuid {
+    fn get_id(&self) -> Uuid {
         generate_uuid_from_str(&self.get_tx_index().to_string())
     }
 
@@ -177,6 +145,122 @@ impl NftMarketplaceActivity {
         self.collection_id
             .clone()
             .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
+    }
+
+    fn get_collection_id(&self) -> Option<Uuid> {
+        self.collection_id
+            .clone()
+            .map(|e| generate_uuid_from_str(&e))
+    }
+
+    fn get_nft_id(&self) -> Option<Uuid> {
+        self.token_data_id
+            .clone()
+            .map(|e| generate_uuid_from_str(&e))
+    }
+
+    pub fn get_nft_activitiy_from_token_event(
+        event: &Event,
+        txn_id: &str,
+        txn_version: i64,
+        txn_timestamp: NaiveDateTime,
+        event_index: i64,
+        block_height: i64,
+        object_metadata: &AHashMap<String, ObjectAggregatedData>,
+        sender: &str,
+    ) -> Result<Option<NftMarketplaceActivity>> {
+        let event_type = event.type_str.clone();
+        let token_event = V2TokenEvent::from_event(&event_type, event.data.as_str(), txn_version);
+        if let Some(token_event) = token_event? {
+            let event_account_addr =
+                standardize_address(&event.key.as_ref().unwrap().account_address);
+
+            let token_data_id = match &token_event {
+                V2TokenEvent::MintEvent(inner) => inner.get_token_address(),
+                V2TokenEvent::Mint(inner) => inner.get_token_address(),
+                V2TokenEvent::BurnEvent(inner) => inner.get_token_address(),
+                V2TokenEvent::Burn(inner) => inner.get_token_address(),
+                V2TokenEvent::TransferEvent(inner) => inner.get_object_address(),
+                _ => event_account_addr.clone(),
+            };
+
+            if let Some(object_data) = object_metadata.get(&token_data_id) {
+                let token_activity = match token_event {
+                    V2TokenEvent::Mint(mint) => Some(NftMarketplaceActivity {
+                        txn_id: txn_id.to_string(),
+                        txn_version,
+                        index: event_index,
+                        block_timestamp: txn_timestamp,
+                        block_height,
+                        standard_event_type: MarketplaceEventType::Mint,
+                        buyer: Some(object_data.object.object_core.get_owner_address()),
+                        collection_id: Some(mint.get_collection_address()),
+                        token_data_id: Some(mint.get_token_address()),
+                        ..Default::default()
+                    }),
+                    V2TokenEvent::MintEvent(mint) => Some(NftMarketplaceActivity {
+                        txn_id: txn_id.to_string(),
+                        txn_version,
+                        index: event_index,
+                        block_timestamp: txn_timestamp,
+                        block_height,
+                        standard_event_type: MarketplaceEventType::Mint,
+                        buyer: Some(object_data.object.object_core.get_owner_address()),
+                        collection_id: Some(event_account_addr),
+                        token_data_id: Some(mint.get_token_address()),
+                        ..Default::default()
+                    }),
+                    V2TokenEvent::Burn(burn) => Some(NftMarketplaceActivity {
+                        txn_id: txn_id.to_string(),
+                        txn_version,
+                        index: event_index,
+                        block_timestamp: txn_timestamp,
+                        block_height,
+                        standard_event_type: MarketplaceEventType::Burn,
+                        seller: burn.get_previous_owner_address(),
+                        collection_id: Some(burn.get_collection_address()),
+                        token_data_id: Some(burn.get_token_address()),
+                        ..Default::default()
+                    }),
+                    V2TokenEvent::BurnEvent(burn) => Some(NftMarketplaceActivity {
+                        txn_id: txn_id.to_string(),
+                        txn_version,
+                        index: event_index,
+                        block_timestamp: txn_timestamp,
+                        block_height,
+                        standard_event_type: MarketplaceEventType::Burn,
+                        seller: Some(sender.to_string()),
+                        collection_id: Some(event_account_addr),
+                        token_data_id: Some(burn.get_token_address()),
+                        ..Default::default()
+                    }),
+                    V2TokenEvent::TransferEvent(transfer) => {
+                        if let Some(token) = &object_data.token {
+                            Some(NftMarketplaceActivity {
+                                txn_id: txn_id.to_string(),
+                                txn_version,
+                                index: event_index,
+                                block_timestamp: txn_timestamp,
+                                block_height,
+                                standard_event_type: MarketplaceEventType::Transfer,
+                                seller: Some(transfer.get_from_address()),
+                                buyer: Some(transfer.get_to_address()),
+                                collection_id: Some(token.get_collection_address()),
+                                token_data_id: Some(transfer.get_object_address()),
+                                ..Default::default()
+                            })
+                        } else {
+                            None
+                        }
+                    },
+                    _ => None,
+                };
+
+                return Ok(token_activity);
+            }
+        }
+
+        Ok(None)
     }
 }
 
@@ -400,88 +484,6 @@ impl ListingModel for NftMarketplaceActivity {
     }
 }
 
-impl CollectionModel for NftMarketplaceActivity {
-    fn get_collection_id(&self) -> Option<Uuid> {
-        self.collection_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&e))
-    }
-
-    fn get_collection_slug(&self) -> Option<String> {
-        if let Some(token_version) = self.token_version.clone() {
-            match token_version {
-                TokenVersion::V1 => self
-                    .collection_name
-                    .clone()
-                    .zip(self.creator_address.clone())
-                    .map(|(collection_name, creator)| {
-                        let collection = collection_name
-                            .chars()
-                            .filter(|&c| c.is_alphanumeric() || c == ' ')
-                            .collect::<String>();
-                        let name = collection
-                            .split_whitespace()
-                            .collect::<Vec<&str>>()
-                            .join("-");
-
-                        let split_addr = creator.split("").collect::<Vec<&str>>();
-                        let trunc_addr = &split_addr[3..11].join("");
-
-                        format!("{}-{}", name, trunc_addr).to_lowercase()
-                    }),
-                TokenVersion::V2 => self.collection_id.clone(),
-            }
-        } else {
-            None
-        }
-    }
-
-    fn is_valid_collection(&self) -> bool {
-        self.collection_id.is_some()
-    }
-}
-
-impl NftModel for NftMarketplaceActivity {
-    fn get_nft_id(&self) -> Option<Uuid> {
-        self.token_data_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&e))
-    }
-
-    fn get_token_id(&self) -> Option<String> {
-        if let Some(token_version) = self.token_version.clone() {
-            match token_version {
-                TokenVersion::V1 => self.token_name.clone().map(|name| name.replace(" ", "%20")),
-                TokenVersion::V2 => self.token_data_id.clone(),
-            }
-        } else {
-            None
-        }
-    }
-
-    fn is_valid_nft(&self) -> bool {
-        if self.standard_event_type == MarketplaceEventType::Burn {
-            self.get_nft_id().is_some()
-        } else {
-            self.get_nft_id().is_some() && self.get_owner().is_some()
-        }
-    }
-
-    fn get_owner(&self) -> Option<String> {
-        match self.standard_event_type {
-            MarketplaceEventType::Mint => self.get_field(MarketplaceField::Buyer),
-            MarketplaceEventType::Burn => None,
-            MarketplaceEventType::Transfer => self.get_field(MarketplaceField::Buyer),
-            MarketplaceEventType::List => self.get_field(MarketplaceField::Seller),
-            MarketplaceEventType::Unlist => self.get_field(MarketplaceField::Seller),
-            MarketplaceEventType::Buy => self.get_field(MarketplaceField::Buyer),
-            MarketplaceEventType::AcceptBid => self.get_field(MarketplaceField::Buyer),
-            MarketplaceEventType::AcceptCollectionBid => self.get_field(MarketplaceField::Buyer),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Display, EnumString)]
 #[strum(serialize_all = "snake_case")]
 pub enum MarketplaceField {
@@ -531,19 +533,6 @@ pub trait ListingModel {
     fn get_listing_id(&self) -> Option<Uuid>;
     fn get_listing_status(&self) -> Option<bool>;
     fn is_valid_listing(&self) -> bool;
-}
-
-pub trait CollectionModel {
-    fn get_collection_id(&self) -> Option<Uuid>;
-    fn get_collection_slug(&self) -> Option<String>;
-    fn is_valid_collection(&self) -> bool;
-}
-
-pub trait NftModel {
-    fn get_nft_id(&self) -> Option<Uuid>;
-    fn get_token_id(&self) -> Option<String>;
-    fn get_owner(&self) -> Option<String>;
-    fn is_valid_nft(&self) -> bool;
 }
 
 #[cfg(test)]
