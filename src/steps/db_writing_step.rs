@@ -6,7 +6,10 @@ use crate::{
         commission::Commission,
         contract::Contract,
         listing::Listing,
-        marketplace::{BidModel, CollectionModel, ListingModel, NftMarketplaceActivity, NftModel},
+        marketplace::{
+            BidModel, CollectionModel, ContractModel, ListingModel, NftMarketplaceActivity,
+            NftModel,
+        },
         nft::Nft,
     },
     postgres::postgres_utils::{execute_in_chunks, ArcDbPool},
@@ -54,6 +57,7 @@ impl Processable for DBWritingStep {
         let mut deduped_listings: HashMap<Option<Uuid>, Listing> = HashMap::new();
         let mut deduped_collections: HashMap<Option<Uuid>, Collection> = HashMap::new();
         let mut deduped_nfts: HashMap<Option<Uuid>, Nft> = HashMap::new();
+        let mut deduped_contracts: HashMap<Option<Uuid>, Contract> = HashMap::new();
 
         for activity in activities.iter() {
             let key = activity.get_tx_index();
@@ -132,6 +136,16 @@ impl Processable for DBWritingStep {
                     .or_insert(listing);
             }
 
+            if let Some(contract) = Contract::new_market_contract_from_activity(activity) {
+                deduped_contracts.insert(contract.id, contract);
+            }
+
+            if activity.is_valid_contract() {
+                let contract: Contract = activity.to_owned().into();
+                let key = contract.id;
+                deduped_contracts.insert(key, contract);
+            }
+
             if activity.is_valid_collection() {
                 let collection: Collection = activity.to_owned().into();
                 let key = collection.id;
@@ -175,16 +189,33 @@ impl Processable for DBWritingStep {
         let listings: Vec<Listing> = deduped_listings.into_values().collect();
         let nfts: Vec<Nft> = deduped_nfts.into_values().collect();
         let collections: Vec<Collection> = deduped_collections.into_values().collect();
+        let contracts: Vec<Contract> = deduped_contracts.into_values().collect();
 
         let action_fut = execute_in_chunks(self.db_pool.clone(), insert_actions, &actions, 200);
         let bid_fut = execute_in_chunks(self.db_pool.clone(), insert_bids, &bids, 200);
         let listing_fut = execute_in_chunks(self.db_pool.clone(), insert_listings, &listings, 200);
         let nft_fut = execute_in_chunks(self.db_pool.clone(), insert_nfts, &nfts, 200);
+
         let collection_fut =
             execute_in_chunks(self.db_pool.clone(), insert_collections, &collections, 200);
+        let contract_fut =
+            execute_in_chunks(self.db_pool.clone(), insert_contracts, &contracts, 200);
 
-        let (action_result, bid_result, listing_result, nft_result, collection_result) =
-            tokio::join!(action_fut, bid_fut, listing_fut, nft_fut, collection_fut);
+        let (
+            action_result,
+            bid_result,
+            listing_result,
+            nft_result,
+            collection_result,
+            contract_result,
+        ) = tokio::join!(
+            action_fut,
+            bid_fut,
+            listing_fut,
+            nft_fut,
+            collection_fut,
+            contract_fut
+        );
 
         for result in [
             action_result,
@@ -192,6 +223,7 @@ impl Processable for DBWritingStep {
             listing_result,
             nft_result,
             collection_result,
+            contract_result,
         ] {
             match result {
                 Ok(_) => (),
@@ -323,10 +355,12 @@ pub fn insert_nfts(
         .set((
             collection_id.eq(excluded(collection_id)),
             contract_id.eq(excluded(contract_id)),
-            name.eq(excluded(name)),
             owner.eq(excluded(owner)),
             burned.eq(excluded(burned)),
             latest_tx_index.eq(excluded(latest_tx_index)),
         ))
         .filter(latest_tx_index.le(excluded(latest_tx_index)))
 }
+
+// TODO: update nft name and media_url, add a new function
+// TODO: update supply, description, cover_url

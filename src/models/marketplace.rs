@@ -1,7 +1,8 @@
 use crate::{
     config::marketplace_config::MarketplaceEventType,
     models::{
-        action::Action, bid::Bid, collection::Collection, listing::Listing, nft::Nft, EventModel,
+        action::Action, bid::Bid, collection::Collection, contract::Contract, listing::Listing,
+        nft::Nft,
     },
     utils::generate_uuid_from_str,
 };
@@ -126,7 +127,6 @@ impl From<NftMarketplaceActivity> for Listing {
     }
 }
 
-// TODO: Handle collection field
 impl From<NftMarketplaceActivity> for Collection {
     fn from(value: NftMarketplaceActivity) -> Self {
         Self {
@@ -158,6 +158,17 @@ impl From<NftMarketplaceActivity> for Nft {
     }
 }
 
+impl From<NftMarketplaceActivity> for Contract {
+    fn from(value: NftMarketplaceActivity) -> Self {
+        Self {
+            id: value.get_contract_id(),
+            type_: Some("non_fungible_tokens".to_string()),
+            name: None,
+            key: value.get_contract_key(),
+        }
+    }
+}
+
 impl NftMarketplaceActivity {
     pub fn get_id(&self) -> Uuid {
         generate_uuid_from_str(&self.get_tx_index().to_string())
@@ -165,12 +176,6 @@ impl NftMarketplaceActivity {
 
     pub fn get_tx_index(&self) -> i64 {
         self.txn_version * 100_000 + self.index
-    }
-
-    pub fn get_contract_id(&self) -> Option<Uuid> {
-        self.collection_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
     }
 
     pub fn get_market_contract_id(&self) -> Option<Uuid> {
@@ -485,544 +490,30 @@ impl NftModel for NftMarketplaceActivity {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct CurrentNFTMarketplaceListing {
-    pub token_data_id: String,
-    pub listing_id: Option<String>,
-    pub collection_id: Option<String>,
-    pub seller: Option<String>,
-    pub price: i64,
-    pub token_amount: Option<i64>,
-    pub token_name: Option<String>,
-    pub is_deleted: bool,
-    pub marketplace: String,
-    pub contract_address: String,
-    pub last_transaction_version: i64,
-    pub last_transaction_timestamp: NaiveDateTime,
-    pub standard_event_type: String,
-    pub block_height: i64,
-    pub event_index: i64,
-}
-
-impl From<CurrentNFTMarketplaceListing> for Listing {
-    fn from(value: CurrentNFTMarketplaceListing) -> Self {
-        Self {
-            id: Some(value.get_id()),
-            tx_index: Some(value.get_tx_index()),
-            contract_id: value.get_contract_id(),
-            nft_id: Some(value.get_nft_id()),
-            market_name: Some(value.marketplace),
-            seller: value.seller,
-            price: Some(value.price),
-            price_str: Some(value.price.to_string()),
-            block_time: Some(value.last_transaction_timestamp),
-            listed: Some(true),
-            nonce: value.listing_id,
-            block_height: Some(value.block_height),
-            // TODO: handle commission_id
-            commission_id: None,
-        }
-    }
-}
-
-impl CurrentNFTMarketplaceListing {
-    pub fn get_id(&self) -> Uuid {
-        generate_uuid_from_str(&format!(
-            "{}::{}::list",
-            self.contract_address, self.token_data_id
-        ))
-    }
-
-    pub fn get_tx_index(&self) -> i64 {
-        self.last_transaction_version * 100_000 + self.event_index
-    }
-
-    pub fn get_nft_id(&self) -> Uuid {
-        generate_uuid_from_str(&self.token_data_id)
-    }
-
-    pub fn get_contract_id(&self) -> Option<Uuid> {
-        self.collection_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
-    }
-}
-
-impl MarketplaceModel for CurrentNFTMarketplaceListing {
-    fn set_field(&mut self, field: MarketplaceField, value: String) {
-        match field {
-            MarketplaceField::TokenDataId => self.token_data_id = value,
-            MarketplaceField::ListingId => self.listing_id = Some(value),
-            MarketplaceField::CollectionId => self.collection_id = Some(value),
-            MarketplaceField::Seller => self.seller = Some(value),
-            MarketplaceField::Price => self.price = value.parse().unwrap_or(0),
-            MarketplaceField::TokenAmount => self.token_amount = value.parse().ok(),
-            MarketplaceField::TokenName => self.token_name = Some(value),
-            MarketplaceField::Marketplace => self.marketplace = value,
-            MarketplaceField::ContractAddress => self.contract_address = value,
-            MarketplaceField::LastTransactionVersion => {
-                self.last_transaction_version = value.parse().unwrap_or(0)
-            },
-            MarketplaceField::LastTransactionTimestamp => {
-                self.last_transaction_timestamp = value.parse().unwrap_or(NaiveDateTime::default())
-            },
-            _ => tracing::debug!("Unknown field: {:?}", field),
-        }
-    }
-
-    fn is_valid(&self) -> bool {
-        !self.token_data_id.is_empty()
-    }
-
-    fn table_name(&self) -> &'static str {
-        CURRENT_NFT_MARKETPLACE_LISTINGS_TABLE_NAME
-    }
-
-    fn updated_at(&self) -> i64 {
-        self.last_transaction_timestamp.and_utc().timestamp()
-    }
-
-    fn get_field(&self, field: MarketplaceField) -> Option<String> {
-        match field {
-            MarketplaceField::TokenDataId => Some(self.token_data_id.clone()),
-            MarketplaceField::ListingId => Some(self.listing_id.clone().unwrap_or_default()),
-            MarketplaceField::CollectionId => Some(self.collection_id.clone().unwrap_or_default()),
-            MarketplaceField::Seller => Some(self.seller.clone().unwrap_or_default()),
-            MarketplaceField::Price => Some(self.price.to_string()),
-            MarketplaceField::TokenAmount => {
-                Some(self.token_amount.unwrap_or_default().to_string())
-            },
-            MarketplaceField::TokenName => Some(self.token_name.clone().unwrap_or_default()),
-            MarketplaceField::Marketplace => Some(self.marketplace.clone()),
-            MarketplaceField::ContractAddress => Some(self.contract_address.clone()),
-            MarketplaceField::LastTransactionVersion => {
-                Some(self.last_transaction_version.to_string())
-            },
-            MarketplaceField::LastTransactionTimestamp => {
-                Some(self.last_transaction_timestamp.to_string())
-            },
-            _ => None,
-        }
-    }
-
-    fn get_txn_version(&self) -> i64 {
-        self.last_transaction_version
-    }
-
-    fn get_standard_event_type(&self) -> String {
-        self.standard_event_type.to_string()
-    }
-}
-
-impl CurrentNFTMarketplaceListing {
-    pub fn build_default(
-        marketplace_name: String,
-        event: &EventModel,
-        is_filled_or_cancelled: bool,
-        event_type: String,
-    ) -> Self {
-        Self {
-            token_data_id: String::new(),
-            listing_id: None,
-            collection_id: None,
-            seller: None,
-            price: 0,
-            token_amount: None,
-            token_name: None,
-            is_deleted: is_filled_or_cancelled,
-            marketplace: marketplace_name,
-            contract_address: event.account_address.clone(),
-            last_transaction_version: event.transaction_version,
-            last_transaction_timestamp: event.block_timestamp,
-            standard_event_type: event_type,
-            block_height: event.transaction_block_height,
-            event_index: event.event_index,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct CurrentNFTMarketplaceTokenBid {
-    pub token_data_id: String,
-    pub offer_id: Option<String>,
-    pub marketplace: String,
-    pub collection_id: Option<String>,
-    pub buyer: String,
-    pub seller: Option<String>,
-    pub price: i64,
-    pub token_amount: Option<i64>,
-    pub token_name: Option<String>,
-    pub status: String,
-    pub contract_address: String,
-    pub last_transaction_version: i64,
-    pub last_transaction_timestamp: NaiveDateTime,
-    pub standard_event_type: String,
-    pub expiration_time: Option<NaiveDateTime>,
-    pub bid_key: Option<i64>,
-    pub txn_id: String,
-}
-
-impl From<CurrentNFTMarketplaceTokenBid> for Bid {
-    fn from(value: CurrentNFTMarketplaceTokenBid) -> Self {
-        Self {
-            id: value.get_id(),
-            market_contract_id: Some(value.get_market_contract_id()),
-            contract_id: value.get_contract_id(),
-            collection_id: value.get_collection_id(),
-            nft_id: Some(value.get_nft_id()),
-            created_tx_id: value.get_created_txn_id(),
-            accepted_tx_id: value.get_accepted_txn_id(),
-            canceled_tx_id: value.get_cancelled_txn_id(),
-            price: Some(value.price),
-            price_str: Some(value.price.to_string()),
-            expires_at: value.expiration_time,
-            nonce: value.offer_id,
-            bid_type: Some("solo".to_string()),
-            bidder: Some(value.buyer),
-            status: Some(value.status),
-            remaining_count: value.token_amount,
-            receiver: value.seller,
-        }
-    }
-}
-
-impl CurrentNFTMarketplaceTokenBid {
-    pub fn get_id(&self) -> Option<Uuid> {
-        self.offer_id.clone().map(|offer_id| {
-            generate_uuid_from_str(&format!(
-                "{}::{}::{}",
-                self.contract_address, self.token_data_id, offer_id,
-            ))
-        })
-    }
-
-    pub fn get_collection_id(&self) -> Option<Uuid> {
-        self.collection_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&e))
-    }
-
-    pub fn get_nft_id(&self) -> Uuid {
-        generate_uuid_from_str(&self.token_data_id)
-    }
-
-    pub fn get_contract_id(&self) -> Option<Uuid> {
+impl ContractModel for NftMarketplaceActivity {
+    fn get_contract_id(&self) -> Option<Uuid> {
         self.collection_id
             .clone()
             .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
     }
 
-    pub fn get_market_contract_id(&self) -> Uuid {
-        generate_uuid_from_str(&format!("{}::{}", self.contract_address, self.marketplace))
-    }
-
-    pub fn get_created_txn_id(&self) -> Option<String> {
-        match self.status.as_str() {
-            "active" => Some(self.txn_id.clone()),
-            _ => None,
+    fn get_contract_key(&self) -> Option<String> {
+        if let Some(token_version) = self.token_version.as_ref() {
+            match token_version.clone() {
+                TokenVersion::V1 => self
+                    .collection_name
+                    .clone()
+                    .zip(self.creator_address.clone())
+                    .map(|(name, creator)| format!("{}::{}", creator, name.replace(" ", "%20"))),
+                TokenVersion::V2 => self.collection_id.clone(),
+            }
+        } else {
+            None
         }
     }
 
-    pub fn get_accepted_txn_id(&self) -> Option<String> {
-        match self.status.as_str() {
-            "matched" => Some(self.txn_id.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn get_cancelled_txn_id(&self) -> Option<String> {
-        match self.status.as_str() {
-            "cancelled" => Some(self.txn_id.clone()),
-            _ => None,
-        }
-    }
-}
-
-impl MarketplaceModel for CurrentNFTMarketplaceTokenBid {
-    fn set_field(&mut self, field: MarketplaceField, value: String) {
-        match field {
-            MarketplaceField::TokenDataId => self.token_data_id = value,
-            MarketplaceField::OfferId => self.offer_id = Some(value),
-            MarketplaceField::Marketplace => self.marketplace = value,
-            MarketplaceField::CollectionId => self.collection_id = Some(value),
-            MarketplaceField::Buyer => self.buyer = value,
-            MarketplaceField::Seller => self.seller = Some(value),
-            MarketplaceField::Price => self.price = value.parse().unwrap_or(0),
-            MarketplaceField::TokenAmount => self.token_amount = value.parse().ok(),
-            MarketplaceField::TokenName => self.token_name = Some(value),
-            MarketplaceField::ContractAddress => self.contract_address = value,
-            MarketplaceField::LastTransactionVersion => {
-                self.last_transaction_version = value.parse().unwrap_or(0)
-            },
-            MarketplaceField::LastTransactionTimestamp => {
-                self.last_transaction_timestamp = value.parse().unwrap_or(NaiveDateTime::default())
-            },
-            MarketplaceField::ExpirationTime => {
-                // TODO: timestamp calculation still not correct
-                if let Ok(timestamp_secs) = value.parse::<u64>() {
-                    self.expiration_time =
-                        Some(parse_timestamp_secs(timestamp_secs, 0).naive_utc());
-                } else {
-                    self.expiration_time = None;
-                }
-            },
-            MarketplaceField::BidKey => self.bid_key = value.parse().ok(),
-            _ => tracing::debug!("Unknown field: {:?}", field),
-        }
-    }
-
-    fn is_valid(&self) -> bool {
-        !self.token_data_id.is_empty() && !self.buyer.is_empty()
-    }
-
-    fn table_name(&self) -> &'static str {
-        CURRENT_NFT_MARKETPLACE_TOKEN_BIDS_TABLE_NAME
-    }
-
-    fn updated_at(&self) -> i64 {
-        self.last_transaction_timestamp.and_utc().timestamp()
-    }
-
-    fn get_field(&self, field: MarketplaceField) -> Option<String> {
-        match field {
-            MarketplaceField::TokenDataId => Some(self.token_data_id.clone()),
-            MarketplaceField::OfferId => Some(self.offer_id.clone().unwrap_or_default()),
-            MarketplaceField::Marketplace => Some(self.marketplace.clone()),
-            MarketplaceField::CollectionId => self.collection_id.clone(),
-            MarketplaceField::Buyer => Some(self.buyer.clone()),
-            MarketplaceField::Price => Some(self.price.to_string()),
-            MarketplaceField::TokenAmount => {
-                Some(self.token_amount.unwrap_or_default().to_string())
-            },
-            MarketplaceField::TokenName => Some(self.token_name.clone().unwrap_or_default()),
-            MarketplaceField::ContractAddress => Some(self.contract_address.clone()),
-            MarketplaceField::LastTransactionVersion => {
-                Some(self.last_transaction_version.to_string())
-            },
-            MarketplaceField::LastTransactionTimestamp => {
-                Some(self.last_transaction_timestamp.to_string())
-            },
-            MarketplaceField::BidKey => self.bid_key.map(|val| val.to_string()),
-            _ => None,
-        }
-    }
-
-    fn get_txn_version(&self) -> i64 {
-        self.last_transaction_version
-    }
-
-    fn get_standard_event_type(&self) -> String {
-        self.standard_event_type.to_string()
-    }
-}
-
-impl CurrentNFTMarketplaceTokenBid {
-    pub fn build_default(
-        marketplace_name: String,
-        event: &EventModel,
-        txn_id: String,
-        status: String,
-        event_type: String,
-    ) -> Self {
-        Self {
-            token_data_id: String::new(),
-            offer_id: None,
-            marketplace: marketplace_name,
-            collection_id: None,
-            buyer: String::new(),
-            price: 0,
-            token_amount: None,
-            token_name: None,
-            status,
-            contract_address: event.account_address.clone(),
-            last_transaction_version: event.transaction_version,
-            last_transaction_timestamp: event.block_timestamp,
-            standard_event_type: event_type,
-            expiration_time: None,
-            bid_key: None,
-            txn_id,
-            seller: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct CurrentNFTMarketplaceCollectionBid {
-    pub collection_offer_id: String,
-    pub collection_id: Option<String>,
-    pub buyer: String,
-    pub price: i64,
-    pub remaining_token_amount: Option<i64>,
-    pub is_deleted: bool,
-    pub marketplace: String,
-    pub contract_address: String,
-    pub last_transaction_version: i64,
-    pub last_transaction_timestamp: NaiveDateTime,
-    pub standard_event_type: String,
-    pub token_data_id: Option<String>,
-    pub expiration_time: Option<NaiveDateTime>,
-    pub bid_key: Option<i64>,
-    pub txn_id: String,
-    pub seller: Option<String>,
-}
-
-impl From<CurrentNFTMarketplaceCollectionBid> for Bid {
-    fn from(value: CurrentNFTMarketplaceCollectionBid) -> Self {
-        Self {
-            id: value.get_id(),
-            market_contract_id: Some(value.get_market_contract_id()),
-            contract_id: value.get_contract_id(),
-            collection_id: value.get_collection_id(),
-            price: Some(value.price),
-            price_str: Some(value.price.to_string()),
-            expires_at: value.expiration_time,
-            nonce: Some(value.collection_offer_id),
-            bid_type: Some("collection".to_string()),
-            bidder: Some(value.buyer),
-            remaining_count: value.remaining_token_amount,
-            status: Some("active".to_string()),
-            accepted_tx_id: None,
-            canceled_tx_id: None,
-            created_tx_id: Some(value.txn_id),
-            nft_id: None,
-            receiver: value.seller,
-        }
-    }
-}
-
-impl CurrentNFTMarketplaceCollectionBid {
-    pub fn get_id(&self) -> Option<Uuid> {
-        self.collection_id.clone().map(|collection_id| {
-            generate_uuid_from_str(&format!(
-                "{}::{}::{}",
-                self.contract_address, collection_id, self.collection_offer_id,
-            ))
-        })
-    }
-
-    pub fn get_collection_id(&self) -> Option<Uuid> {
-        self.collection_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&e))
-    }
-
-    pub fn get_contract_id(&self) -> Option<Uuid> {
-        self.collection_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
-    }
-
-    pub fn get_market_contract_id(&self) -> Uuid {
-        generate_uuid_from_str(&format!("{}::{}", self.contract_address, self.marketplace))
-    }
-}
-
-impl MarketplaceModel for CurrentNFTMarketplaceCollectionBid {
-    fn set_field(&mut self, field: MarketplaceField, value: String) {
-        match field {
-            MarketplaceField::CollectionOfferId => self.collection_offer_id = value,
-            MarketplaceField::CollectionId => self.collection_id = Some(value),
-            MarketplaceField::Buyer => self.buyer = value,
-            MarketplaceField::Price => self.price = value.parse().unwrap_or(0),
-            MarketplaceField::RemainingTokenAmount => {
-                self.remaining_token_amount = value.parse().ok()
-            },
-            MarketplaceField::Marketplace => self.marketplace = value,
-            MarketplaceField::ContractAddress => self.contract_address = value,
-            MarketplaceField::LastTransactionVersion => {
-                self.last_transaction_version = value.parse().unwrap_or(0)
-            },
-            MarketplaceField::LastTransactionTimestamp => {
-                self.last_transaction_timestamp = value.parse().unwrap_or(NaiveDateTime::default())
-            },
-            MarketplaceField::TokenDataId => self.token_data_id = Some(value),
-            MarketplaceField::ExpirationTime => {
-                if let Ok(timestamp_secs) = value.parse::<u64>() {
-                    self.expiration_time =
-                        Some(parse_timestamp_secs(timestamp_secs, 0).naive_utc());
-                } else {
-                    self.expiration_time = None;
-                }
-            },
-            MarketplaceField::BidKey => self.bid_key = value.parse().ok(),
-            _ => tracing::debug!("Unknown field: {:?}", field),
-        }
-    }
-
-    fn is_valid(&self) -> bool {
-        !self.collection_offer_id.is_empty()
-    }
-
-    fn table_name(&self) -> &'static str {
-        CURRENT_NFT_MARKETPLACE_COLLECTION_BIDS_TABLE_NAME
-    }
-
-    fn updated_at(&self) -> i64 {
-        self.last_transaction_timestamp.and_utc().timestamp()
-    }
-
-    fn get_field(&self, field: MarketplaceField) -> Option<String> {
-        match field {
-            MarketplaceField::CollectionOfferId => Some(self.collection_offer_id.clone()),
-            MarketplaceField::CollectionId => Some(self.collection_id.clone().unwrap_or_default()),
-            MarketplaceField::Buyer => Some(self.buyer.clone()),
-            MarketplaceField::Price => Some(self.price.to_string()),
-            MarketplaceField::RemainingTokenAmount => {
-                Some(self.remaining_token_amount.unwrap_or_default().to_string())
-            },
-            MarketplaceField::Marketplace => Some(self.marketplace.clone()),
-            MarketplaceField::ContractAddress => Some(self.contract_address.clone()),
-            MarketplaceField::LastTransactionVersion => {
-                Some(self.last_transaction_version.to_string())
-            },
-            MarketplaceField::LastTransactionTimestamp => {
-                Some(self.last_transaction_timestamp.to_string())
-            },
-            MarketplaceField::TokenDataId => Some(self.token_data_id.clone().unwrap_or_default()),
-            MarketplaceField::BidKey => self.bid_key.map(|val| val.to_string()),
-            _ => None,
-        }
-    }
-
-    fn get_txn_version(&self) -> i64 {
-        self.last_transaction_version
-    }
-
-    fn get_standard_event_type(&self) -> String {
-        self.standard_event_type.to_string()
-    }
-}
-
-impl CurrentNFTMarketplaceCollectionBid {
-    pub fn build_default(
-        marketplace_name: String,
-        event: &EventModel,
-        txn_id: String,
-        is_filled_or_cancelled: bool,
-        event_type: String,
-    ) -> Self {
-        Self {
-            collection_offer_id: String::new(),
-            collection_id: None,
-            buyer: String::new(),
-            price: 0,
-            remaining_token_amount: if is_filled_or_cancelled {
-                Some(0)
-            } else {
-                None
-            },
-            is_deleted: is_filled_or_cancelled,
-            marketplace: marketplace_name,
-            contract_address: event.account_address.clone(),
-            last_transaction_version: event.transaction_version,
-            last_transaction_timestamp: event.block_timestamp,
-            token_data_id: None,
-            standard_event_type: event_type,
-            expiration_time: None,
-            bid_key: None,
-            txn_id,
-            seller: None,
-        }
+    fn is_valid_contract(&self) -> bool {
+        self.get_contract_id().is_some()
     }
 }
 
@@ -1088,6 +579,12 @@ pub trait NftModel {
     fn get_token_id(&self) -> Option<String>;
     fn get_owner(&self) -> Option<String>;
     fn is_valid_nft(&self) -> bool;
+}
+
+pub trait ContractModel {
+    fn get_contract_id(&self) -> Option<Uuid>;
+    fn get_contract_key(&self) -> Option<String>;
+    fn is_valid_contract(&self) -> bool;
 }
 
 #[cfg(test)]
