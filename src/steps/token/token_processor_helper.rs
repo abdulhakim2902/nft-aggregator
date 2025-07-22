@@ -157,11 +157,11 @@ pub fn parse_token(
                 match token_event {
                     TokenEvent::DepositTokenEvent(inner) => {
                         deposit_event_owner
-                            .insert(inner.id.token_data_id.to_id(), event_account_addr.clone());
+                            .insert(inner.id.token_data_id.to_addr(), event_account_addr.clone());
                     },
                     TokenEvent::TokenDeposit(inner) => {
                         deposit_event_owner
-                            .insert(inner.id.token_data_id.to_id(), event_account_addr.clone());
+                            .insert(inner.id.token_data_id.to_addr(), event_account_addr.clone());
                     },
                     _ => {},
                 }
@@ -171,6 +171,17 @@ pub fn parse_token(
         for wsc in transaction_info.changes.iter() {
             match wsc.change.as_ref().unwrap() {
                 Change::WriteTableItem(table_item) => {
+                    let collection = Collection::get_from_write_table_item(
+                        table_item,
+                        txn_version,
+                        &table_handler_to_owner,
+                    )
+                    .unwrap();
+
+                    if let Some(collection) = collection {
+                        current_collections.insert(collection.id.clone(), collection);
+                    }
+
                     let nft = Nft::get_from_write_table_item(
                         table_item,
                         txn_version,

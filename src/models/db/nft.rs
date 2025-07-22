@@ -5,7 +5,10 @@ use crate::{
     },
     schema::nfts,
     steps::token::token_utils::TableMetadataForToken,
-    utils::{generate_uuid_from_str, object_utils::ObjectAggregatedData},
+    utils::{
+        create_id_for_collection, create_id_for_contract, create_id_for_nft,
+        object_utils::ObjectAggregatedData,
+    },
 };
 use ahash::{AHashMap, HashMap};
 use anyhow::Result;
@@ -40,24 +43,22 @@ impl Nft {
         object_metadata: &AHashMap<String, ObjectAggregatedData>,
     ) -> Result<Option<Self>> {
         if let Some(inner) = TokenResourceData::from_write_resource(wr)? {
-            let token_data_id = standardize_address(&wr.address);
-            let contract_id = generate_uuid_from_str(&format!(
-                "{}::non_fungible_tokens",
-                inner.get_collection_address()
-            ));
+            let token_addr = standardize_address(&wr.address);
+            let contract_id = create_id_for_contract(&inner.get_collection_address());
+            let collection_id = create_id_for_collection(&inner.get_collection_address());
 
             let mut nft = Nft {
-                id: Some(generate_uuid_from_str(&token_data_id)),
+                id: Some(create_id_for_nft(&token_addr)),
                 owner: None,
-                token_id: Some(token_data_id.clone()),
-                collection_id: Some(inner.get_collection_id()),
+                token_id: Some(token_addr.clone()),
+                collection_id: Some(collection_id),
                 contract_id: Some(contract_id),
                 burned: None,
                 name: Some(inner.name),
                 media_url: Some(inner.uri),
             };
 
-            if let Some(object_data) = object_metadata.get(&token_data_id) {
+            if let Some(object_data) = object_metadata.get(&token_addr) {
                 let object_core = object_data.object.object_core.clone();
                 let owner_address = object_core.get_owner_address();
 
@@ -99,7 +100,7 @@ impl Nft {
                     &table_item_data.key,
                     txn_version,
                 )? {
-                    Some(TokenWriteSet::TokenDataId(inner)) => Some(inner),
+                    Some(TokenWriteSet::TokenAddr(inner)) => Some(inner),
                     _ => None,
                 };
 
@@ -109,17 +110,15 @@ impl Nft {
                             Some(tm.get_owner_address())
                         },
                         _ => deposit_event_owner
-                            .get(&token_data_id_struct.to_id())
+                            .get(&token_data_id_struct.to_addr())
                             .cloned(),
                     };
 
-                    let nft_id = generate_uuid_from_str(&token_data_id_struct.to_id());
+                    let nft_id = create_id_for_nft(&token_data_id_struct.to_addr());
                     let collection_id =
-                        generate_uuid_from_str(&token_data_id_struct.get_collection_id());
-                    let contract_id = generate_uuid_from_str(&format!(
-                        "{}::non_fungible_tokens",
-                        token_data_id_struct.get_collection_id()
-                    ));
+                        create_id_for_collection(&token_data_id_struct.get_collection_addr());
+                    let contract_id =
+                        create_id_for_contract(&token_data_id_struct.get_collection_addr());
 
                     let nft = Nft {
                         id: Some(nft_id),

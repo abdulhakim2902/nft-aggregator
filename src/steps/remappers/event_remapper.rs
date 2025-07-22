@@ -152,26 +152,30 @@ impl EventRemapper {
                         })?;
 
                         // After processing all field remappings, generate necessary id fields if needed for PK
-                        if activity.get_field(MarketplaceField::CollectionId).is_none() {
-                            let collection_id = generate_collection_id(
+                        if activity
+                            .get_field(MarketplaceField::CollectionAddr)
+                            .is_none()
+                        {
+                            let collection_addr = generate_collection_addr(
                                 activity.creator_address.clone(),
                                 activity.collection_name.clone(),
                             );
 
-                            if let Some(collection_id) = collection_id {
-                                activity.set_field(MarketplaceField::CollectionId, collection_id);
+                            if let Some(collection_addr) = collection_addr {
+                                activity
+                                    .set_field(MarketplaceField::CollectionAddr, collection_addr);
                             }
                         }
 
-                        if activity.get_field(MarketplaceField::TokenDataId).is_none() {
-                            let token_data_id = generate_token_data_id(
+                        if activity.get_field(MarketplaceField::TokenAddr).is_none() {
+                            let token_addr = generate_token_addr(
                                 activity.creator_address.clone(),
                                 activity.collection_name.clone(),
                                 activity.token_name.clone(),
                             );
 
-                            if let Some(token_data_id) = token_data_id {
-                                activity.set_field(MarketplaceField::TokenDataId, token_data_id);
+                            if let Some(token_addr) = token_addr {
+                                activity.set_field(MarketplaceField::TokenAddr, token_addr);
                             }
                         }
 
@@ -227,7 +231,7 @@ impl EventRemapper {
     }
 }
 
-fn generate_token_data_id(
+fn generate_token_addr(
     creator_address: Option<String>,
     collection_name: Option<String>,
     token_name: Option<String>,
@@ -248,7 +252,7 @@ fn generate_token_data_id(
     }
 }
 
-fn generate_collection_id(
+fn generate_collection_addr(
     creator_address: Option<String>,
     collection_name: Option<String>,
 ) -> Option<String> {

@@ -2,7 +2,11 @@ use crate::{
     config::marketplace_config::MarketplaceEventType,
     models::db::{action::Action, bid::Bid, listing::Listing},
     steps::token::token_utils::{TokenEvent, V2TokenEvent},
-    utils::{generate_uuid_from_str, object_utils::ObjectAggregatedData},
+    utils::{
+        create_id_for_action, create_id_for_bid, create_id_for_collection, create_id_for_contract,
+        create_id_for_listing, create_id_for_market_contract, create_id_for_nft,
+        object_utils::ObjectAggregatedData,
+    },
 };
 use ahash::AHashMap;
 use anyhow::Result;
@@ -36,9 +40,9 @@ pub struct NftMarketplaceActivity {
     pub raw_event_type: String,
     pub standard_event_type: MarketplaceEventType,
     pub creator_address: Option<String>,
-    pub collection_id: Option<String>,
+    pub collection_addr: Option<String>,
     pub collection_name: Option<String>,
-    pub token_data_id: Option<String>,
+    pub token_addr: Option<String>,
     pub token_name: Option<String>,
     pub price: i64,
     pub token_amount: Option<i64>,
@@ -124,8 +128,8 @@ impl From<NftMarketplaceActivity> for Listing {
 }
 
 impl NftMarketplaceActivity {
-    fn get_id(&self) -> Uuid {
-        generate_uuid_from_str(&self.get_tx_index().to_string())
+    pub fn get_id(&self) -> Uuid {
+        create_id_for_action(&self.get_tx_index().to_string())
     }
 
     pub fn get_tx_index(&self) -> i64 {
@@ -134,29 +138,25 @@ impl NftMarketplaceActivity {
 
     pub fn get_market_contract_id(&self) -> Option<Uuid> {
         self.contract_address
-            .clone()
-            .zip(self.marketplace.clone())
-            .map(|(contract_address, marketplace)| {
-                generate_uuid_from_str(&format!("{}::{}", contract_address, marketplace))
-            })
+            .as_ref()
+            .zip(self.marketplace.as_ref())
+            .map(|(c, m)| create_id_for_market_contract(c, m))
     }
 
-    fn get_contract_id(&self) -> Option<Uuid> {
-        self.collection_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&format!("{}::non_fungible_tokens", e)))
+    pub fn get_contract_id(&self) -> Option<Uuid> {
+        self.collection_addr
+            .as_ref()
+            .map(|c| create_id_for_contract(c))
     }
 
-    fn get_collection_id(&self) -> Option<Uuid> {
-        self.collection_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&e))
+    pub fn get_collection_id(&self) -> Option<Uuid> {
+        self.collection_addr
+            .as_ref()
+            .map(|c| create_id_for_collection(c))
     }
 
-    fn get_nft_id(&self) -> Option<Uuid> {
-        self.token_data_id
-            .clone()
-            .map(|e| generate_uuid_from_str(&e))
+    pub fn get_nft_id(&self) -> Option<Uuid> {
+        self.token_addr.as_ref().map(|t| create_id_for_nft(t))
     }
 
     pub fn get_nft_v1_activity_from_token_event(
@@ -181,8 +181,8 @@ impl NftMarketplaceActivity {
                     block_height,
                     standard_event_type: MarketplaceEventType::Mint,
                     buyer: Some(inner.get_account()),
-                    collection_id: Some(inner.id.get_collection_id()),
-                    token_data_id: Some(inner.id.to_id()),
+                    collection_addr: Some(inner.id.get_collection_addr()),
+                    token_addr: Some(inner.id.to_addr()),
                     ..Default::default()
                 }),
                 TokenEvent::MintTokenEvent(inner) => Some(NftMarketplaceActivity {
@@ -193,8 +193,8 @@ impl NftMarketplaceActivity {
                     block_height,
                     standard_event_type: MarketplaceEventType::Mint,
                     buyer: Some(event_account_address.clone()),
-                    collection_id: Some(inner.id.get_collection_id()),
-                    token_data_id: Some(inner.id.to_id()),
+                    collection_addr: Some(inner.id.get_collection_addr()),
+                    token_addr: Some(inner.id.to_addr()),
                     ..Default::default()
                 }),
                 TokenEvent::Burn(inner) => Some(NftMarketplaceActivity {
@@ -205,8 +205,8 @@ impl NftMarketplaceActivity {
                     block_height,
                     standard_event_type: MarketplaceEventType::Burn,
                     seller: Some(inner.get_account()),
-                    collection_id: Some(inner.id.token_data_id.get_collection_id()),
-                    token_data_id: Some(inner.id.token_data_id.to_id()),
+                    collection_addr: Some(inner.id.token_data_id.get_collection_addr()),
+                    token_addr: Some(inner.id.token_data_id.to_addr()),
                     ..Default::default()
                 }),
                 TokenEvent::BurnTokenEvent(inner) => Some(NftMarketplaceActivity {
@@ -217,8 +217,8 @@ impl NftMarketplaceActivity {
                     block_height,
                     standard_event_type: MarketplaceEventType::Burn,
                     seller: Some(event_account_address),
-                    collection_id: Some(inner.id.token_data_id.get_collection_id()),
-                    token_data_id: Some(inner.id.token_data_id.to_id()),
+                    collection_addr: Some(inner.id.token_data_id.get_collection_addr()),
+                    token_addr: Some(inner.id.token_data_id.to_addr()),
                     ..Default::default()
                 }),
                 _ => None,
@@ -246,7 +246,7 @@ impl NftMarketplaceActivity {
             let event_account_addr =
                 standardize_address(&event.key.as_ref().unwrap().account_address);
 
-            let token_data_id = match &token_event {
+            let token_addr = match &token_event {
                 V2TokenEvent::MintEvent(inner) => inner.get_token_address(),
                 V2TokenEvent::Mint(inner) => inner.get_token_address(),
                 V2TokenEvent::BurnEvent(inner) => inner.get_token_address(),
@@ -255,7 +255,7 @@ impl NftMarketplaceActivity {
                 _ => event_account_addr.clone(),
             };
 
-            if let Some(object_data) = object_metadata.get(&token_data_id) {
+            if let Some(object_data) = object_metadata.get(&token_addr) {
                 let token_activity = match token_event {
                     V2TokenEvent::Mint(mint) => Some(NftMarketplaceActivity {
                         txn_id: txn_id.to_string(),
@@ -265,8 +265,8 @@ impl NftMarketplaceActivity {
                         block_height,
                         standard_event_type: MarketplaceEventType::Mint,
                         buyer: Some(object_data.object.object_core.get_owner_address()),
-                        collection_id: Some(mint.get_collection_address()),
-                        token_data_id: Some(mint.get_token_address()),
+                        collection_addr: Some(mint.get_collection_address()),
+                        token_addr: Some(mint.get_token_address()),
                         ..Default::default()
                     }),
                     V2TokenEvent::MintEvent(mint) => Some(NftMarketplaceActivity {
@@ -277,8 +277,8 @@ impl NftMarketplaceActivity {
                         block_height,
                         standard_event_type: MarketplaceEventType::Mint,
                         buyer: Some(object_data.object.object_core.get_owner_address()),
-                        collection_id: Some(event_account_addr),
-                        token_data_id: Some(mint.get_token_address()),
+                        collection_addr: Some(event_account_addr),
+                        token_addr: Some(mint.get_token_address()),
                         ..Default::default()
                     }),
                     V2TokenEvent::Burn(burn) => Some(NftMarketplaceActivity {
@@ -289,8 +289,8 @@ impl NftMarketplaceActivity {
                         block_height,
                         standard_event_type: MarketplaceEventType::Burn,
                         seller: burn.get_previous_owner_address(),
-                        collection_id: Some(burn.get_collection_address()),
-                        token_data_id: Some(burn.get_token_address()),
+                        collection_addr: Some(burn.get_collection_address()),
+                        token_addr: Some(burn.get_token_address()),
                         ..Default::default()
                     }),
                     V2TokenEvent::BurnEvent(burn) => Some(NftMarketplaceActivity {
@@ -301,8 +301,8 @@ impl NftMarketplaceActivity {
                         block_height,
                         standard_event_type: MarketplaceEventType::Burn,
                         seller: Some(sender.to_string()),
-                        collection_id: Some(event_account_addr),
-                        token_data_id: Some(burn.get_token_address()),
+                        collection_addr: Some(event_account_addr),
+                        token_addr: Some(burn.get_token_address()),
                         ..Default::default()
                     }),
                     V2TokenEvent::TransferEvent(transfer) => {
@@ -316,8 +316,8 @@ impl NftMarketplaceActivity {
                                 standard_event_type: MarketplaceEventType::Transfer,
                                 seller: Some(transfer.get_from_address()),
                                 buyer: Some(transfer.get_to_address()),
-                                collection_id: Some(token.get_collection_address()),
-                                token_data_id: Some(transfer.get_object_address()),
+                                collection_addr: Some(token.get_collection_address()),
+                                token_addr: Some(transfer.get_object_address()),
                                 ..Default::default()
                             })
                         } else {
@@ -343,8 +343,8 @@ impl MarketplaceModel for NftMarketplaceActivity {
         }
 
         match field {
-            MarketplaceField::CollectionId => self.collection_id = Some(value),
-            MarketplaceField::TokenDataId => self.token_data_id = Some(value),
+            MarketplaceField::CollectionAddr => self.collection_addr = Some(value),
+            MarketplaceField::TokenAddr => self.token_addr = Some(value),
             MarketplaceField::TokenName => self.token_name = Some(value),
             MarketplaceField::CreatorAddress => self.creator_address = Some(value),
             MarketplaceField::CollectionName => self.collection_name = Some(value),
@@ -393,8 +393,8 @@ impl MarketplaceModel for NftMarketplaceActivity {
 
     fn get_field(&self, field: MarketplaceField) -> Option<String> {
         match field {
-            MarketplaceField::CollectionId => self.collection_id.clone(),
-            MarketplaceField::TokenDataId => self.token_data_id.clone(),
+            MarketplaceField::CollectionAddr => self.collection_addr.clone(),
+            MarketplaceField::TokenAddr => self.token_addr.clone(),
             MarketplaceField::TokenName => self.token_name.clone(),
             MarketplaceField::CreatorAddress => self.creator_address.clone(),
             MarketplaceField::CollectionName => self.collection_name.clone(),
@@ -444,31 +444,21 @@ impl BidModel for NftMarketplaceActivity {
         if let Some(type_) = self.get_bid_type() {
             if type_.as_str() == "solo" {
                 self.offer_id
-                    .clone()
-                    .zip(
-                        self.token_data_id
-                            .clone()
-                            .zip(self.contract_address.clone()),
-                    )
-                    .map(|(offer_id, (token_data_id, contract_addr))| {
-                        generate_uuid_from_str(&format!(
-                            "{}::{}::{}",
-                            contract_addr, token_data_id, offer_id,
-                        ))
+                    .as_ref()
+                    .zip(self.token_addr.as_ref().zip(self.contract_address.as_ref()))
+                    .map(|(offer_id, (token_addr, contract_addr))| {
+                        create_id_for_bid(contract_addr, token_addr, offer_id)
                     })
             } else {
                 self.offer_id
-                    .clone()
+                    .as_ref()
                     .zip(
-                        self.collection_id
-                            .clone()
-                            .zip(self.contract_address.clone()),
+                        self.collection_addr
+                            .as_ref()
+                            .zip(self.contract_address.as_ref()),
                     )
-                    .map(|(offer_id, (collection_id, contract_addr))| {
-                        generate_uuid_from_str(&format!(
-                            "{}::{}::{}",
-                            contract_addr, collection_id, offer_id,
-                        ))
+                    .map(|(offer_id, (collection_addr, contract_addr))| {
+                        create_id_for_bid(contract_addr, collection_addr, offer_id)
                     })
             }
         } else {
@@ -537,12 +527,10 @@ impl ListingModel for NftMarketplaceActivity {
     }
 
     fn get_listing_id(&self) -> Option<Uuid> {
-        self.token_data_id
-            .clone()
-            .zip(self.contract_address.clone())
-            .map(|(token_id, contract_addr)| {
-                generate_uuid_from_str(&format!("{}::{}::list", contract_addr, token_id))
-            })
+        self.contract_address
+            .as_ref()
+            .zip(self.token_addr.as_ref())
+            .map(|(c, t)| create_id_for_listing(c, t))
     }
 
     fn get_listing_status(&self) -> Option<bool> {
@@ -558,8 +546,8 @@ impl ListingModel for NftMarketplaceActivity {
 #[derive(Debug, Clone, PartialEq, Display, EnumString)]
 #[strum(serialize_all = "snake_case")]
 pub enum MarketplaceField {
-    CollectionId,
-    TokenDataId,
+    CollectionAddr,
+    TokenAddr,
     TokenName,
     CreatorAddress,
     CollectionName,
@@ -631,7 +619,7 @@ mod tests {
     fn test_valid_fields() {
         // Test a few valid field names
         let fields = vec![
-            ("token_data_id", Ok(MarketplaceField::TokenDataId)),
+            ("token_data_id", Ok(MarketplaceField::TokenAddr)),
             ("price", Ok(MarketplaceField::Price)),
             ("buyer", Ok(MarketplaceField::Buyer)),
             ("seller", Ok(MarketplaceField::Seller)),

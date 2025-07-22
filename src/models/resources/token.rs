@@ -1,4 +1,3 @@
-use crate::utils::generate_uuid_from_str;
 use anyhow::{Context, Result};
 use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::WriteResource,
@@ -10,7 +9,6 @@ use aptos_indexer_processor_sdk::{
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Formatter};
-use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Token {
@@ -23,10 +21,6 @@ pub struct Token {
 impl Token {
     pub fn get_collection_address(&self) -> String {
         self.collection.get_reference_address()
-    }
-
-    pub fn get_collection_id(&self) -> Uuid {
-        generate_uuid_from_str(&self.get_collection_address())
     }
 }
 
@@ -64,7 +58,7 @@ impl TryFrom<&WriteResource> for TokenIdentifiers {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TokenWriteSet {
-    TokenDataId(TokenDataIdType),
+    TokenAddr(TokenDataIdType),
     TokenId(TokenIdType),
     TokenData(TokenDataType),
     Token(TokenType),
@@ -79,8 +73,8 @@ impl TokenWriteSet {
         txn_version: i64,
     ) -> Result<Option<TokenWriteSet>> {
         match data_type {
-            "0x3::token::TokenDataId" => {
-                serde_json::from_str(data).map(|inner| Some(TokenWriteSet::TokenDataId(inner)))
+            "0x3::token::TokenAddr" => {
+                serde_json::from_str(data).map(|inner| Some(TokenWriteSet::TokenAddr(inner)))
             },
             "0x3::token::TokenId" => {
                 serde_json::from_str(data).map(|inner| Some(TokenWriteSet::TokenId(inner)))
@@ -113,7 +107,7 @@ pub struct TokenDataIdType {
 }
 
 impl TokenDataIdType {
-    pub fn to_id(&self) -> String {
+    pub fn to_addr(&self) -> String {
         format!("0x{}", self.to_hash())
     }
 
@@ -121,8 +115,8 @@ impl TokenDataIdType {
         hash_str(&self.to_string())
     }
 
-    pub fn get_collection_id(&self) -> String {
-        CollectionDataIdType::new(self.creator.clone(), self.collection.clone()).to_id()
+    pub fn get_collection_addr(&self) -> String {
+        CollectionDataIdType::new(self.creator.clone(), self.collection.clone()).to_addr()
     }
 
     pub fn get_creator_address(&self) -> String {
@@ -157,7 +151,7 @@ impl CollectionDataIdType {
         hash_str(&self.to_string())
     }
 
-    pub fn to_id(&self) -> String {
+    pub fn to_addr(&self) -> String {
         format!("0x{}", self.to_hash())
     }
 }
