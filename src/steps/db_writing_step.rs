@@ -5,6 +5,7 @@ use crate::{
     },
     postgres::postgres_utils::{execute_in_chunks, ArcDbPool},
     schema,
+    steps::reduction_step::ReductionOutput,
 };
 use aptos_indexer_processor_sdk::{
     traits::{async_step::AsyncRunType, AsyncStep, NamedStep, Processable},
@@ -31,13 +32,7 @@ impl DBWritingStep {
 
 #[async_trait]
 impl Processable for DBWritingStep {
-    type Input = (
-        Vec<Collection>,
-        Vec<Nft>,
-        Vec<Action>,
-        Vec<Bid>,
-        Vec<Listing>,
-    );
+    type Input = ReductionOutput;
     type Output = ();
     type RunType = AsyncRunType;
 
@@ -45,17 +40,48 @@ impl Processable for DBWritingStep {
         &mut self,
         input: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<()>>, ProcessorError> {
-        let (collections, nfts, actions, bids, listings) = input.data;
+        let action_fut = execute_in_chunks(
+            self.db_pool.clone(),
+            insert_actions,
+            &input.data.actions,
+            200,
+        );
+        let bid_fut = execute_in_chunks(self.db_pool.clone(), insert_bids, &input.data.bids, 200);
+        let listing_fut = execute_in_chunks(
+            self.db_pool.clone(),
+            insert_listings,
+            &input.data.listings,
+            200,
+        );
+        let nft_fut = execute_in_chunks(self.db_pool.clone(), insert_nfts, &input.data.nfts, 200);
+        let collection_fut = execute_in_chunks(
+            self.db_pool.clone(),
+            insert_collections,
+            &input.data.collections,
+            200,
+        );
+        let contract_fut = execute_in_chunks(
+            self.db_pool.clone(),
+            insert_contracts,
+            &input.data.contracts,
+            200,
+        );
 
-        let action_fut = execute_in_chunks(self.db_pool.clone(), insert_actions, &actions, 200);
-        let bid_fut = execute_in_chunks(self.db_pool.clone(), insert_bids, &bids, 200);
-        let listing_fut = execute_in_chunks(self.db_pool.clone(), insert_listings, &listings, 200);
-        let nft_fut = execute_in_chunks(self.db_pool.clone(), insert_nfts, &nfts, 200);
-        let collection_fut =
-            execute_in_chunks(self.db_pool.clone(), insert_collections, &collections, 200);
-
-        let (action_result, bid_result, listing_result, nft_result, collection_result) =
-            tokio::join!(action_fut, bid_fut, listing_fut, nft_fut, collection_fut,);
+        let (
+            action_result,
+            bid_result,
+            listing_result,
+            nft_result,
+            collection_result,
+            contract_result,
+        ) = tokio::join!(
+            action_fut,
+            bid_fut,
+            listing_fut,
+            nft_fut,
+            collection_fut,
+            contract_fut
+        );
 
         for result in [
             action_result,
@@ -63,6 +89,7 @@ impl Processable for DBWritingStep {
             listing_result,
             nft_result,
             collection_result,
+            contract_result,
         ] {
             match result {
                 Ok(_) => (),
@@ -204,6 +231,4 @@ pub fn insert_nfts(
         ))
 }
 
-// TODO: update nft name and media_url, add a new function
-// TODO: update supply, description, cover_url
 // TODO: royalty

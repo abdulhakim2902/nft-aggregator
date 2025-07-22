@@ -112,6 +112,7 @@ impl From<NftMarketplaceActivity> for Listing {
             id: value.get_listing_id(),
             tx_index: Some(value.get_tx_index()),
             contract_id: value.get_contract_id(),
+            market_contract_id: value.get_market_contract_id(),
             nft_id: value.get_nft_id(),
             listed: value.get_listing_status(),
             market_name: value.marketplace,

@@ -1,6 +1,12 @@
-use crate::models::{
-    db::{action::Action, bid::Bid, collection::Collection, listing::Listing, nft::Nft},
-    marketplace::{BidModel, ListingModel, NftMarketplaceActivity},
+use crate::{
+    models::{
+        db::{
+            action::Action, bid::Bid, collection::Collection, contract::Contract, listing::Listing,
+            nft::Nft,
+        },
+        marketplace::{BidModel, ListingModel, NftMarketplaceActivity},
+    },
+    steps::remapper_step::RemappingOutput,
 };
 use aptos_indexer_processor_sdk::{
     traits::{AsyncRunType, AsyncStep, NamedStep, Processable},
@@ -15,6 +21,17 @@ pub struct NFTAccumulator {
     actions: HashMap<i64, Action>,
     bids: HashMap<Option<Uuid>, Bid>,
     listings: HashMap<Option<Uuid>, Listing>,
+    market_contracts: HashMap<Option<Uuid>, Contract>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ReductionOutput {
+    pub actions: Vec<Action>,
+    pub bids: Vec<Bid>,
+    pub listings: Vec<Listing>,
+    pub collections: Vec<Collection>,
+    pub nfts: Vec<Nft>,
+    pub contracts: Vec<Contract>,
 }
 
 impl NFTAccumulator {
@@ -101,11 +118,19 @@ impl NFTAccumulator {
         }
     }
 
-    pub fn drain(&mut self) -> (Vec<Action>, Vec<Bid>, Vec<Listing>) {
+    pub fn fold_market_contract(&mut self, activity: &NftMarketplaceActivity) {
+        if let Some(contract) = Contract::new_market_contract_from_activity(activity) {
+            let key = contract.id;
+            self.market_contracts.insert(key, contract);
+        }
+    }
+
+    pub fn drain(&mut self) -> (Vec<Action>, Vec<Bid>, Vec<Listing>, Vec<Contract>) {
         (
             self.actions.drain().map(|(_, v)| v).collect(),
             self.bids.drain().map(|(_, v)| v).collect(),
             self.listings.drain().map(|(_, v)| v).collect(),
+            self.market_contracts.drain().map(|(_, v)| v).collect(),
         )
     }
 }
@@ -128,34 +153,37 @@ impl NFTReductionStep {
 
 #[async_trait::async_trait]
 impl Processable for NFTReductionStep {
-    type Input = (Vec<Collection>, Vec<Nft>, Vec<Vec<NftMarketplaceActivity>>);
-    type Output = (
-        Vec<Collection>,
-        Vec<Nft>,
-        Vec<Action>,
-        Vec<Bid>,
-        Vec<Listing>,
-    );
+    type Input = RemappingOutput;
+    type Output = ReductionOutput;
     type RunType = AsyncRunType;
 
     async fn process(
         &mut self,
         input: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
-        let (collections, nfts, marketplace_activities) = input.data;
-
-        for activities in marketplace_activities {
+        for activities in input.data.marketplace_activities.iter() {
             for activity in activities {
-                self.accumulator.fold_actions(&activity);
-                self.accumulator.fold_bidding(&activity);
-                self.accumulator.fold_listing(&activity);
+                self.accumulator.fold_actions(activity);
+                self.accumulator.fold_bidding(activity);
+                self.accumulator.fold_listing(activity);
             }
         }
 
-        let (actions, bids, listings) = self.accumulator.drain();
+        let (actions, bids, listings, mut contracts) = self.accumulator.drain();
+
+        contracts.extend(input.data.contracts);
+
+        let output = ReductionOutput {
+            collections: input.data.collections.clone(),
+            nfts: input.data.nfts.clone(),
+            actions,
+            bids,
+            listings,
+            contracts,
+        };
 
         Ok(Some(TransactionContext {
-            data: (collections, nfts, actions, bids, listings),
+            data: output,
             metadata: input.metadata,
         }))
     }

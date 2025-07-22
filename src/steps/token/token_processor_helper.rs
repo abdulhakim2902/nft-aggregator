@@ -1,6 +1,6 @@
 use crate::{
     models::{
-        db::{collection::Collection, nft::Nft},
+        db::{collection::Collection, contract::Contract, nft::Nft},
         marketplace::NftMarketplaceActivity,
         resources::{FromWriteResource, V2TokenResource},
     },
@@ -18,7 +18,12 @@ use uuid::Uuid;
 
 pub fn parse_token(
     transactions: &[Transaction],
-) -> (Vec<NftMarketplaceActivity>, Vec<Collection>, Vec<Nft>) {
+) -> (
+    Vec<NftMarketplaceActivity>,
+    Vec<Contract>,
+    Vec<Collection>,
+    Vec<Nft>,
+) {
     let table_handler_to_owner =
         TableMetadataForToken::get_table_handle_to_owner_from_transactions(transactions);
 
@@ -28,6 +33,7 @@ pub fn parse_token(
 
     let mut current_collections: AHashMap<Option<Uuid>, Collection> = AHashMap::new();
     let mut current_nfts: AHashMap<Option<Uuid>, Nft> = AHashMap::new();
+    let mut current_contracts: AHashMap<Option<Uuid>, Contract> = AHashMap::new();
 
     for txn in transactions {
         let txn_data = match txn.txn_data.as_ref() {
@@ -171,18 +177,29 @@ pub fn parse_token(
         for wsc in transaction_info.changes.iter() {
             match wsc.change.as_ref().unwrap() {
                 Change::WriteTableItem(table_item) => {
-                    let collection = Collection::get_from_write_table_item(
+                    let contract_result = Contract::get_from_write_table_item(
                         table_item,
                         txn_version,
                         &table_handler_to_owner,
                     )
                     .unwrap();
 
-                    if let Some(collection) = collection {
+                    if let Some(contract) = contract_result {
+                        current_contracts.insert(contract.id.clone(), contract);
+                    }
+
+                    let collection_result = Collection::get_from_write_table_item(
+                        table_item,
+                        txn_version,
+                        &table_handler_to_owner,
+                    )
+                    .unwrap();
+
+                    if let Some(collection) = collection_result {
                         current_collections.insert(collection.id.clone(), collection);
                     }
 
-                    let nft = Nft::get_from_write_table_item(
+                    let nft_result = Nft::get_from_write_table_item(
                         table_item,
                         txn_version,
                         &table_handler_to_owner,
@@ -190,16 +207,22 @@ pub fn parse_token(
                     )
                     .unwrap();
 
-                    if let Some(nft) = nft {
+                    if let Some(nft) = nft_result {
                         current_nfts.insert(nft.id.clone(), nft);
                     }
                 },
                 Change::WriteResource(resource) => {
-                    let result =
+                    let contract_result = Contract::get_from_write_resource(resource).unwrap();
+
+                    if let Some(contract) = contract_result {
+                        current_contracts.insert(contract.id.clone(), contract);
+                    }
+
+                    let colletion_result =
                         Collection::get_from_write_resource(resource, &token_metadata_helper)
                             .unwrap();
 
-                    if let Some(collection) = result {
+                    if let Some(collection) = colletion_result {
                         current_collections.insert(collection.id.clone(), collection);
                     }
 
@@ -215,10 +238,11 @@ pub fn parse_token(
         }
     }
 
+    let contracts = current_contracts.into_values().collect::<Vec<Contract>>();
     let collections = current_collections
         .into_values()
         .collect::<Vec<Collection>>();
     let nfts = current_nfts.into_values().collect::<Vec<Nft>>();
 
-    (activities, collections, nfts)
+    (activities, contracts, collections, nfts)
 }

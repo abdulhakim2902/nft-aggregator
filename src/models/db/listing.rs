@@ -18,6 +18,7 @@ pub struct Listing {
     pub block_time: Option<NaiveDateTime>,
     pub commission_id: Option<Uuid>,
     pub contract_id: Option<Uuid>,
+    pub market_contract_id: Option<Uuid>,
     pub listed: Option<bool>,
     pub market_name: Option<String>,
     pub nft_id: Option<Uuid>,

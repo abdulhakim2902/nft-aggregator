@@ -2,7 +2,7 @@ use super::remappers::resource_remapper::ResourceMapper;
 use crate::{
     config::marketplace_config::NFTMarketplaceConfig,
     models::{
-        db::{collection::Collection, nft::Nft},
+        db::{collection::Collection, contract::Contract, nft::Nft},
         marketplace::NftMarketplaceActivity,
     },
     steps::{remappers::event_remapper::EventRemapper, token::token_processor_helper::parse_token},
@@ -20,6 +20,14 @@ use std::sync::Arc;
 pub struct Remapper {
     event_remapper: Arc<EventRemapper>,
     _resource_remapper: Arc<ResourceMapper>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RemappingOutput {
+    pub contracts: Vec<Contract>,
+    pub collections: Vec<Collection>,
+    pub nfts: Vec<Nft>,
+    pub marketplace_activities: Vec<Vec<NftMarketplaceActivity>>,
 }
 
 pub struct ProcessStep
@@ -56,7 +64,7 @@ impl ProcessStep {
 #[async_trait::async_trait]
 impl Processable for ProcessStep {
     type Input = Vec<Transaction>;
-    type Output = (Vec<Collection>, Vec<Nft>, Vec<Vec<NftMarketplaceActivity>>);
+    type Output = RemappingOutput;
     type RunType = AsyncRunType;
 
     async fn process(
@@ -64,7 +72,7 @@ impl Processable for ProcessStep {
         transactions: TransactionContext<Vec<Transaction>>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
         // Handle NFT Metadata and activity
-        let (token_activities, collections, nfts) = parse_token(&transactions.data);
+        let (token_activities, contracts, collections, nfts) = parse_token(&transactions.data);
 
         // Handle NFT Marketplace Activity
         let results = self
@@ -102,8 +110,15 @@ impl Processable for ProcessStep {
 
         marketplace_activities.push(token_activities);
 
+        let output = RemappingOutput {
+            contracts,
+            collections,
+            nfts,
+            marketplace_activities,
+        };
+
         Ok(Some(TransactionContext {
-            data: (collections, nfts, marketplace_activities),
+            data: output,
             metadata: transactions.metadata,
         }))
     }

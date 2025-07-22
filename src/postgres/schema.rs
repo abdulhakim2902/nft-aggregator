@@ -113,6 +113,7 @@ diesel::table! {
         block_time -> Timestamptz,
         commission_id -> Nullable<Uuid>,
         contract_id -> Nullable<Uuid>,
+        market_contract_id -> Nullable<Uuid>,
         nft_id -> Uuid,
         listed -> Nullable<Bool>,
         #[max_length = 128]
