@@ -7,7 +7,7 @@ use crate::{
     steps::token::token_utils::TableMetadataForToken,
     utils::{generate_uuid_from_str, object_utils::ObjectAggregatedData},
 };
-use ahash::AHashMap;
+use ahash::{AHashMap, HashMap};
 use anyhow::Result;
 use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::{WriteResource, WriteTableItem},
@@ -80,6 +80,7 @@ impl Nft {
         table_item: &WriteTableItem,
         txn_version: i64,
         table_handle_to_owner: &AHashMap<String, TableMetadataForToken>,
+        deposit_event_owner: &HashMap<String, String>,
     ) -> Result<Option<Self>> {
         if let Some(table_item_data) = table_item.data.as_ref() {
             let maybe_token_data = match TokenWriteSet::from_table_item_type(
@@ -107,13 +108,9 @@ impl Nft {
                         Some(tm) if tm.table_type == TYPE_TOKEN_STORE_V1 => {
                             Some(tm.get_owner_address())
                         },
-                        _ => {
-                            None
-                            // token_v1_aggregated_events
-                            // .get(&token_data_id)
-                            // .and_then(|events| events.deposit_module_events.as_slice().last())
-                            // .and_then(|e| e.to_address.clone())
-                        },
+                        _ => deposit_event_owner
+                            .get(&token_data_id_struct.to_id())
+                            .cloned(),
                     };
 
                     let nft_id = generate_uuid_from_str(&token_data_id_struct.to_id());

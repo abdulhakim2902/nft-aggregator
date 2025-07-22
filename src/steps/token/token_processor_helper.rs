@@ -4,7 +4,7 @@ use crate::{
         marketplace::NftMarketplaceActivity,
         resources::{FromWriteResource, V2TokenResource},
     },
-    steps::token::token_utils::TableMetadataForToken,
+    steps::token::token_utils::{TableMetadataForToken, TokenEvent},
     utils::object_utils::{ObjectAggregatedData, ObjectWithMetadata},
 };
 use ahash::AHashMap;
@@ -72,6 +72,8 @@ pub fn parse_token(
         let user_req = user_req.unwrap();
         let sender = &user_req.sender;
 
+        let mut deposit_event_owner: AHashMap<String, String> = AHashMap::new();
+
         for wsc in transaction_info.changes.iter() {
             if let Change::WriteResource(wr) = wsc.change.as_ref().unwrap() {
                 if let Some(object) = ObjectWithMetadata::from_write_resource(wr).unwrap() {
@@ -116,7 +118,21 @@ pub fn parse_token(
         }
 
         for (index, event) in user_txn.events.iter().enumerate() {
-            let activity = NftMarketplaceActivity::get_nft_v2_activitiy_from_token_event(
+            let nft_v1_activity = NftMarketplaceActivity::get_nft_v1_activity_from_token_event(
+                event,
+                &txn_id,
+                txn_version,
+                txn_timestamp,
+                index as i64,
+                txn.block_height as i64,
+            )
+            .unwrap();
+
+            if let Some(activity) = nft_v1_activity {
+                activities.push(activity);
+            }
+
+            let nft_v2_activity = NftMarketplaceActivity::get_nft_v2_activity_from_token_event(
                 event,
                 &txn_id,
                 txn_version,
@@ -128,8 +144,27 @@ pub fn parse_token(
             )
             .unwrap();
 
-            if let Some(activity) = activity {
+            if let Some(activity) = nft_v2_activity {
                 activities.push(activity);
+            }
+
+            let token_event =
+                TokenEvent::from_event(event.type_str.as_str(), event.data.as_str(), txn_version);
+
+            if let Some(token_event) = token_event.unwrap() {
+                let event_account_addr =
+                    standardize_address(&event.key.as_ref().unwrap().account_address);
+                match token_event {
+                    TokenEvent::DepositTokenEvent(inner) => {
+                        deposit_event_owner
+                            .insert(inner.id.token_data_id.to_id(), event_account_addr.clone());
+                    },
+                    TokenEvent::TokenDeposit(inner) => {
+                        deposit_event_owner
+                            .insert(inner.id.token_data_id.to_id(), event_account_addr.clone());
+                    },
+                    _ => {},
+                }
             }
         }
 
@@ -140,6 +175,7 @@ pub fn parse_token(
                         table_item,
                         txn_version,
                         &table_handler_to_owner,
+                        &deposit_event_owner,
                     )
                     .unwrap();
 

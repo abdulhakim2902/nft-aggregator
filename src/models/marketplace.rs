@@ -1,7 +1,7 @@
 use crate::{
     config::marketplace_config::MarketplaceEventType,
     models::db::{action::Action, bid::Bid, listing::Listing},
-    steps::token::token_utils::V2TokenEvent,
+    steps::token::token_utils::{TokenEvent, V2TokenEvent},
     utils::{generate_uuid_from_str, object_utils::ObjectAggregatedData},
 };
 use ahash::AHashMap;
@@ -159,7 +159,78 @@ impl NftMarketplaceActivity {
             .map(|e| generate_uuid_from_str(&e))
     }
 
-    pub fn get_nft_v2_activitiy_from_token_event(
+    pub fn get_nft_v1_activity_from_token_event(
+        event: &Event,
+        txn_id: &str,
+        txn_version: i64,
+        txn_timestamp: NaiveDateTime,
+        event_index: i64,
+        block_height: i64,
+    ) -> Result<Option<NftMarketplaceActivity>> {
+        let event_type = event.type_str.clone();
+        let token_event = TokenEvent::from_event(&event_type, event.data.as_str(), txn_version);
+        if let Some(token_event) = token_event? {
+            let event_account_address =
+                standardize_address(&event.key.as_ref().unwrap().account_address);
+            let token_activity = match &token_event {
+                TokenEvent::Mint(inner) => Some(NftMarketplaceActivity {
+                    txn_id: txn_id.to_string(),
+                    txn_version,
+                    index: event_index,
+                    block_timestamp: txn_timestamp,
+                    block_height,
+                    standard_event_type: MarketplaceEventType::Mint,
+                    buyer: Some(inner.get_account()),
+                    collection_id: Some(inner.id.get_collection_id()),
+                    token_data_id: Some(inner.id.to_id()),
+                    ..Default::default()
+                }),
+                TokenEvent::MintTokenEvent(inner) => Some(NftMarketplaceActivity {
+                    txn_id: txn_id.to_string(),
+                    txn_version,
+                    index: event_index,
+                    block_timestamp: txn_timestamp,
+                    block_height,
+                    standard_event_type: MarketplaceEventType::Mint,
+                    buyer: Some(event_account_address.clone()),
+                    collection_id: Some(inner.id.get_collection_id()),
+                    token_data_id: Some(inner.id.to_id()),
+                    ..Default::default()
+                }),
+                TokenEvent::Burn(inner) => Some(NftMarketplaceActivity {
+                    txn_id: txn_id.to_string(),
+                    txn_version,
+                    index: event_index,
+                    block_timestamp: txn_timestamp,
+                    block_height,
+                    standard_event_type: MarketplaceEventType::Burn,
+                    seller: Some(inner.get_account()),
+                    collection_id: Some(inner.id.token_data_id.get_collection_id()),
+                    token_data_id: Some(inner.id.token_data_id.to_id()),
+                    ..Default::default()
+                }),
+                TokenEvent::BurnTokenEvent(inner) => Some(NftMarketplaceActivity {
+                    txn_id: txn_id.to_string(),
+                    txn_version,
+                    index: event_index,
+                    block_timestamp: txn_timestamp,
+                    block_height,
+                    standard_event_type: MarketplaceEventType::Burn,
+                    seller: Some(event_account_address),
+                    collection_id: Some(inner.id.token_data_id.get_collection_id()),
+                    token_data_id: Some(inner.id.token_data_id.to_id()),
+                    ..Default::default()
+                }),
+                _ => None,
+            };
+
+            return Ok(token_activity);
+        }
+
+        Ok(None)
+    }
+
+    pub fn get_nft_v2_activity_from_token_event(
         event: &Event,
         txn_id: &str,
         txn_version: i64,

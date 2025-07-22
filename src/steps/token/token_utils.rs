@@ -1,4 +1,7 @@
-use crate::models::resources::{token::TokenDataIdType, MoveResource, V1TokenResource};
+use crate::models::resources::{
+    token::{TokenDataIdType, TokenIdType},
+    MoveResource, V1TokenResource,
+};
 use ahash::AHashMap;
 use anyhow::{Context, Result};
 use aptos_indexer_processor_sdk::{
@@ -275,20 +278,128 @@ impl TableMetadataForToken {
     }
 }
 
-#[derive(Default, Debug, Clone)]
-pub struct V1TokenAggregatedEvents {
-    pub withdraw_module_events: Vec<TokenActivityHelperV1>,
-    pub deposit_module_events: Vec<TokenActivityHelperV1>,
-    pub token_offer_module_events: Vec<TokenActivityHelperV1>,
-    pub token_offer_claim_module_events: Vec<TokenActivityHelperV1>,
-    pub token_offer_cancel_module_events: Vec<TokenActivityHelperV1>,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TokenEvent {
+    MintTokenEvent(MintTokenEventType),
+    Mint(MintTokenEventTypeV2),
+    BurnTokenEvent(BurnTokenEventType),
+    Burn(BurnTokenEventTypeV2),
+    WithdrawTokenEvent(WithdrawTokenEventType),
+    TokenWithdraw(WithdrawTokenEventTypeV2),
+    DepositTokenEvent(DepositTokenEventType),
+    TokenDeposit(DepositTokenEventTypeV2),
 }
 
-#[derive(Clone, Debug)]
-pub struct TokenActivityHelperV1 {
-    pub token_data_id_struct: TokenDataIdType,
-    pub property_version: BigDecimal,
-    pub from_address: Option<String>,
-    pub to_address: Option<String>,
-    pub token_amount: BigDecimal,
+impl TokenEvent {
+    pub fn from_event(data_type: &str, data: &str, txn_version: i64) -> Result<Option<Self>> {
+        match data_type {
+            "0x3::token::MintTokenEvent" => {
+                serde_json::from_str(data).map(|inner| Some(Self::MintTokenEvent(inner)))
+            },
+            "0x3::token::Mint" => serde_json::from_str(data).map(|inner| Some(Self::Mint(inner))),
+            "0x3::token::BurnTokenEvent" => {
+                serde_json::from_str(data).map(|inner| Some(Self::BurnTokenEvent(inner)))
+            },
+            "0x3::token::Burn" => serde_json::from_str(data).map(|inner| Some(Self::Burn(inner))),
+            "0x3::token::WithdrawEvent" => {
+                serde_json::from_str(data).map(|inner| Some(Self::WithdrawTokenEvent(inner)))
+            },
+            "0x3::token::TokenWithdraw" => {
+                serde_json::from_str(data).map(|inner| Some(Self::TokenWithdraw(inner)))
+            },
+            "0x3::token::DepositEvent" => {
+                serde_json::from_str(data).map(|inner| Some(Self::DepositTokenEvent(inner)))
+            },
+            "0x3::token::TokenDeposit" => {
+                serde_json::from_str(data).map(|inner| Some(Self::TokenDeposit(inner)))
+            },
+            _ => Ok(None),
+        }
+        .context(format!(
+            "version {txn_version} failed! failed to parse type {data_type}, data {data:?}"
+        ))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WithdrawTokenEventType {
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub amount: BigDecimal,
+    pub id: TokenIdType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WithdrawTokenEventTypeV2 {
+    account: String,
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub amount: BigDecimal,
+    pub id: TokenIdType,
+}
+impl WithdrawTokenEventTypeV2 {
+    pub fn get_account(&self) -> String {
+        standardize_address(&self.account)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DepositTokenEventType {
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub amount: BigDecimal,
+    pub id: TokenIdType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DepositTokenEventTypeV2 {
+    account: String,
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub amount: BigDecimal,
+    pub id: TokenIdType,
+}
+
+impl DepositTokenEventTypeV2 {
+    pub fn get_account(&self) -> String {
+        standardize_address(&self.account)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MintTokenEventType {
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub amount: BigDecimal,
+    pub id: TokenDataIdType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MintTokenEventTypeV2 {
+    creator: String,
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub amount: BigDecimal,
+    pub id: TokenDataIdType,
+}
+
+impl MintTokenEventTypeV2 {
+    pub fn get_account(&self) -> String {
+        standardize_address(&self.creator)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BurnTokenEventType {
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub amount: BigDecimal,
+    pub id: TokenIdType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BurnTokenEventTypeV2 {
+    account: String,
+    #[serde(deserialize_with = "deserialize_from_string")]
+    pub amount: BigDecimal,
+    pub id: TokenIdType,
+}
+
+impl BurnTokenEventTypeV2 {
+    pub fn get_account(&self) -> String {
+        standardize_address(&self.account)
+    }
 }
