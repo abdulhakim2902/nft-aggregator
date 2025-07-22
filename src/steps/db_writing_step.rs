@@ -1,10 +1,7 @@
 use crate::{
-    models::{
-        db::{
-            action::Action, bid::Bid, collection::Collection, commission::Commission,
-            contract::Contract, listing::Listing, nft::Nft,
-        },
-        marketplace::{BidModel, ListingModel, NftMarketplaceActivity},
+    models::db::{
+        action::Action, bid::Bid, collection::Collection, commission::Commission,
+        contract::Contract, listing::Listing, nft::Nft,
     },
     postgres::postgres_utils::{execute_in_chunks, ArcDbPool},
     schema,
@@ -20,9 +17,7 @@ use diesel::{
     query_dsl::methods::FilterDsl,
     ExpressionMethods,
 };
-use std::collections::HashMap;
 use tonic::async_trait;
-use uuid::Uuid;
 
 pub struct DBWritingStep {
     pub db_pool: ArcDbPool,
@@ -36,7 +31,13 @@ impl DBWritingStep {
 
 #[async_trait]
 impl Processable for DBWritingStep {
-    type Input = (Vec<Collection>, Vec<Nft>, Vec<Vec<NftMarketplaceActivity>>);
+    type Input = (
+        Vec<Collection>,
+        Vec<Nft>,
+        Vec<Action>,
+        Vec<Bid>,
+        Vec<Listing>,
+    );
     type Output = ();
     type RunType = AsyncRunType;
 
@@ -44,127 +45,17 @@ impl Processable for DBWritingStep {
         &mut self,
         input: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<()>>, ProcessorError> {
-        let (collections, nfts, marketplace_activities) = input.data;
-
-        let mut deduped_actions: HashMap<i64, Action> = HashMap::new();
-        let mut deduped_bids: HashMap<Option<Uuid>, Bid> = HashMap::new();
-        let mut deduped_listings: HashMap<Option<Uuid>, Listing> = HashMap::new();
-        let mut deduped_contracts: HashMap<Option<Uuid>, Contract> = HashMap::new();
-
-        for activities in marketplace_activities.iter() {
-            for activity in activities {
-                let key = activity.get_tx_index();
-                let action: Action = activity.to_owned().into();
-                deduped_actions.insert(key, action);
-
-                if activity.is_valid_bid() {
-                    let bid: Bid = activity.to_owned().into();
-                    let key = bid.id;
-                    deduped_bids
-                        .entry(key)
-                        .and_modify(|existing: &mut Bid| {
-                            let is_active = bid
-                                .status
-                                .clone()
-                                .map_or(false, |status| status.as_str() == "active");
-
-                            if let Some(tx_id) = bid.created_tx_id.clone() {
-                                existing.created_tx_id = Some(tx_id);
-                            }
-
-                            if let Some(tx_id) = bid.accepted_tx_id.clone() {
-                                existing.accepted_tx_id = Some(tx_id);
-                                if is_active {
-                                    existing.status = Some("matched".to_string());
-                                }
-                            }
-
-                            if let Some(tx_id) = bid.canceled_tx_id.clone() {
-                                existing.canceled_tx_id = Some(tx_id);
-                                if is_active {
-                                    existing.status = Some("cancelled".to_string());
-                                };
-                            }
-
-                            if let Some(receiver) = bid.receiver.clone() {
-                                existing.receiver = Some(receiver);
-                            }
-                        })
-                        .or_insert(bid);
-                }
-
-                if activity.is_valid_listing() {
-                    let listing: Listing = activity.to_owned().into();
-                    let key = listing.id;
-                    deduped_listings
-                        .entry(key)
-                        .and_modify(|existing: &mut Listing| {
-                            let is_listed = listing.listed.unwrap_or(false);
-                            let is_latest = listing
-                                .block_time
-                                .zip(existing.block_time)
-                                .map_or(false, |(current, existing)| current.gt(&existing));
-
-                            if is_latest {
-                                existing.block_time = listing.block_time.clone();
-                                existing.listed = listing.listed.clone();
-                                existing.block_height = listing.block_height.clone();
-                                existing.commission_id = listing.commission_id.clone();
-                                existing.nft_id = listing.nft_id.clone();
-                                existing.nonce = listing.nonce.clone();
-                                existing.price = listing.price.clone();
-                                existing.price_str = listing.price_str.clone();
-                                existing.seller = listing.seller.clone();
-                                existing.tx_index = listing.tx_index.clone();
-
-                                if !is_listed {
-                                    existing.nonce = None;
-                                    existing.price = None;
-                                    existing.price_str = None;
-                                    existing.seller = None;
-                                    existing.tx_index = None;
-                                }
-                            }
-                        })
-                        .or_insert(listing);
-                }
-
-                if let Some(contract) = Contract::new_market_contract_from_activity(activity) {
-                    deduped_contracts.insert(contract.id, contract);
-                }
-            }
-        }
-
-        let actions: Vec<Action> = deduped_actions.into_values().collect();
-        let bids: Vec<Bid> = deduped_bids.into_values().collect();
-        let listings: Vec<Listing> = deduped_listings.into_values().collect();
-        let contracts: Vec<Contract> = deduped_contracts.into_values().collect();
+        let (collections, nfts, actions, bids, listings) = input.data;
 
         let action_fut = execute_in_chunks(self.db_pool.clone(), insert_actions, &actions, 200);
         let bid_fut = execute_in_chunks(self.db_pool.clone(), insert_bids, &bids, 200);
         let listing_fut = execute_in_chunks(self.db_pool.clone(), insert_listings, &listings, 200);
         let nft_fut = execute_in_chunks(self.db_pool.clone(), insert_nfts, &nfts, 200);
-
         let collection_fut =
             execute_in_chunks(self.db_pool.clone(), insert_collections, &collections, 200);
-        let contract_fut =
-            execute_in_chunks(self.db_pool.clone(), insert_contracts, &contracts, 200);
 
-        let (
-            action_result,
-            bid_result,
-            listing_result,
-            nft_result,
-            collection_result,
-            contract_result,
-        ) = tokio::join!(
-            action_fut,
-            bid_fut,
-            listing_fut,
-            nft_fut,
-            collection_fut,
-            contract_fut
-        );
+        let (action_result, bid_result, listing_result, nft_result, collection_result) =
+            tokio::join!(action_fut, bid_fut, listing_fut, nft_fut, collection_fut,);
 
         for result in [
             action_result,
@@ -172,7 +63,6 @@ impl Processable for DBWritingStep {
             listing_result,
             nft_result,
             collection_result,
-            contract_result,
         ] {
             match result {
                 Ok(_) => (),
@@ -316,4 +206,4 @@ pub fn insert_nfts(
 
 // TODO: update nft name and media_url, add a new function
 // TODO: update supply, description, cover_url
-// TODO: Update nfts if the actions is burned
+// TODO: royalty

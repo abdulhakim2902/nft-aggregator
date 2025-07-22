@@ -1,23 +1,112 @@
-use crate::models::marketplace::{MarketplaceField, MarketplaceModel, NftMarketplaceActivity};
+use crate::models::{
+    db::{action::Action, bid::Bid, collection::Collection, listing::Listing, nft::Nft},
+    marketplace::{BidModel, ListingModel, NftMarketplaceActivity},
+};
 use aptos_indexer_processor_sdk::{
     traits::{AsyncRunType, AsyncStep, NamedStep, Processable},
     types::transaction_context::TransactionContext,
     utils::errors::ProcessorError,
 };
-use std::{collections::HashMap, mem, str::FromStr};
+use std::collections::HashMap;
+use uuid::Uuid;
 
 #[derive(Clone, Debug, Default)]
 pub struct NFTAccumulator {
-    activities: Vec<NftMarketplaceActivity>,
+    actions: HashMap<i64, Action>,
+    bids: HashMap<Option<Uuid>, Bid>,
+    listings: HashMap<Option<Uuid>, Listing>,
 }
 
 impl NFTAccumulator {
-    pub fn add_activity(&mut self, activity: NftMarketplaceActivity) {
-        self.activities.push(activity);
+    pub fn fold_actions(&mut self, activity: &NftMarketplaceActivity) {
+        let key = activity.get_tx_index();
+        let action: Action = activity.to_owned().into();
+
+        self.actions.insert(key, action);
     }
 
-    pub fn drain(&mut self) -> Vec<NftMarketplaceActivity> {
-        mem::take(&mut self.activities)
+    pub fn fold_bidding(&mut self, activity: &NftMarketplaceActivity) {
+        if activity.is_valid_bid() {
+            let bid: Bid = activity.to_owned().into();
+            let key = bid.id;
+            self.bids
+                .entry(key)
+                .and_modify(|existing: &mut Bid| {
+                    let is_active = bid
+                        .status
+                        .clone()
+                        .map_or(false, |status| status.as_str() == "active");
+
+                    if let Some(tx_id) = bid.created_tx_id.clone() {
+                        existing.created_tx_id = Some(tx_id);
+                    }
+
+                    if let Some(tx_id) = bid.accepted_tx_id.clone() {
+                        existing.accepted_tx_id = Some(tx_id);
+                        if is_active {
+                            existing.status = Some("matched".to_string());
+                        }
+                    }
+
+                    if let Some(tx_id) = bid.canceled_tx_id.clone() {
+                        existing.canceled_tx_id = Some(tx_id);
+                        if is_active {
+                            existing.status = Some("cancelled".to_string());
+                        };
+                    }
+
+                    if let Some(receiver) = bid.receiver.clone() {
+                        existing.receiver = Some(receiver);
+                    }
+                })
+                .or_insert(bid);
+        }
+    }
+
+    pub fn fold_listing(&mut self, activity: &NftMarketplaceActivity) {
+        if activity.is_valid_listing() {
+            let listing: Listing = activity.to_owned().into();
+            let key = listing.id;
+            self.listings
+                .entry(key)
+                .and_modify(|existing: &mut Listing| {
+                    let is_listed = listing.listed.unwrap_or(false);
+                    let is_latest = listing
+                        .block_time
+                        .zip(existing.block_time)
+                        .map_or(false, |(current, existing)| current.gt(&existing));
+
+                    if is_latest {
+                        existing.block_time = listing.block_time.clone();
+                        existing.listed = listing.listed.clone();
+                        existing.block_height = listing.block_height.clone();
+                        existing.commission_id = listing.commission_id.clone();
+                        existing.nft_id = listing.nft_id.clone();
+                        existing.nonce = listing.nonce.clone();
+                        existing.price = listing.price.clone();
+                        existing.price_str = listing.price_str.clone();
+                        existing.seller = listing.seller.clone();
+                        existing.tx_index = listing.tx_index.clone();
+
+                        if !is_listed {
+                            existing.nonce = None;
+                            existing.price = None;
+                            existing.price_str = None;
+                            existing.seller = None;
+                            existing.tx_index = None;
+                        }
+                    }
+                })
+                .or_insert(listing);
+        }
+    }
+
+    pub fn drain(&mut self) -> (Vec<Action>, Vec<Bid>, Vec<Listing>) {
+        (
+            self.actions.drain().map(|(_, v)| v).collect(),
+            self.bids.drain().map(|(_, v)| v).collect(),
+            self.listings.drain().map(|(_, v)| v).collect(),
+        )
     }
 }
 
@@ -39,67 +128,35 @@ impl NFTReductionStep {
 
 #[async_trait::async_trait]
 impl Processable for NFTReductionStep {
-    type Input = Vec<(
-        Vec<NftMarketplaceActivity>,
-        HashMap<(i64, String), NftMarketplaceActivity>,
-        HashMap<(i64, String), NftMarketplaceActivity>,
-        HashMap<String, HashMap<String, String>>,
-    )>;
-    type Output = Vec<NftMarketplaceActivity>;
+    type Input = (Vec<Collection>, Vec<Nft>, Vec<Vec<NftMarketplaceActivity>>);
+    type Output = (
+        Vec<Collection>,
+        Vec<Nft>,
+        Vec<Action>,
+        Vec<Bid>,
+        Vec<Listing>,
+    );
     type RunType = AsyncRunType;
 
     async fn process(
         &mut self,
-        transactions: TransactionContext<Self::Input>,
+        input: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
-        for marketplace_activity in transactions.data {
-            let (activities, transfers, deposits, resources) = marketplace_activity;
+        let (collections, nfts, marketplace_activities) = input.data;
 
-            for mut activity in activities {
-                if let Some(token_data_id) = activity.token_data_id.as_ref() {
-                    let key = (activity.txn_version, token_data_id.to_string());
-
-                    // RESOURCE HANDLER
-                    if let Some(resource) = resources.get(token_data_id).cloned() {
-                        for (column, value) in resource {
-                            activity.set_field(
-                                MarketplaceField::from_str(&column).unwrap(),
-                                value.clone(),
-                            );
-                        }
-                    }
-
-                    // TOKEN V1 HANDLER
-                    if let Some(deposit) = deposits.get(&key).cloned() {
-                        if let Some(buyer) = deposit.buyer.as_ref() {
-                            activity.set_field(MarketplaceField::Buyer, buyer.to_string());
-                        }
-                    }
-
-                    // TOKEN V2 HANDLER
-                    if let Some(mut transfer) = transfers.get(&key).cloned() {
-                        if let Some(buyer) = transfer.buyer.as_ref() {
-                            activity.set_field(MarketplaceField::Buyer, buyer.to_string());
-                        }
-
-                        if let Some(collection_id) = activity.collection_id.as_ref() {
-                            transfer.set_field(
-                                MarketplaceField::CollectionId,
-                                collection_id.to_string(),
-                            );
-                        }
-
-                        self.accumulator.add_activity(transfer);
-                    }
-                }
-
-                self.accumulator.add_activity(activity);
+        for activities in marketplace_activities {
+            for activity in activities {
+                self.accumulator.fold_actions(&activity);
+                self.accumulator.fold_bidding(&activity);
+                self.accumulator.fold_listing(&activity);
             }
         }
 
+        let (actions, bids, listings) = self.accumulator.drain();
+
         Ok(Some(TransactionContext {
-            data: self.accumulator.drain(),
-            metadata: transactions.metadata,
+            data: (collections, nfts, actions, bids, listings),
+            metadata: input.metadata,
         }))
     }
 }
