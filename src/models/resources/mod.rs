@@ -6,6 +6,7 @@ pub mod token;
 use crate::{
     models::resources::{
         collection::Collection,
+        royalty::Royalty,
         supply::{ConcurrentSupply, FixedSupply, UnlimitedSupply},
         token::{
             Collection as CollectionV1, PendingClaims, PropertyMapModel, Token, TokenIdentifiers,
@@ -36,6 +37,7 @@ pub const TYPE_FIXED_SUPPLY: &str = formatcp!("{TOKEN_V2_ADDR}::collection::Fixe
 pub const TYPE_UNLIMITED_SUPPLY: &str = formatcp!("{TOKEN_V2_ADDR}::collection::UnlimitedSupply");
 pub const TYPE_TOKEN_IDENTIFIERS: &str = formatcp!("{TOKEN_V2_ADDR}::token::TokenIdentifiers");
 pub const TYPE_PROPERTY_MAP: &str = formatcp!("{TOKEN_V2_ADDR}::property_map::PropertyMap");
+pub const TYPE_ROYALTY: &str = formatcp!("{TOKEN_V2_ADDR}::royalty::Royalty");
 
 pub const TYPE_COLLECTION_V1: &str = formatcp!("{TOKEN_ADDR}::token::Collection");
 pub const TYPE_TOKEN_STORE_V1: &str = formatcp!("{TOKEN_ADDR}::token::TokenStore");
@@ -169,6 +171,7 @@ pub enum V2TokenResource {
     Token(Token),
     ObjectCore(ObjectCore),
     PropertyMapModel(PropertyMapModel),
+    Royalty(Royalty),
 }
 
 impl V2TokenResource {
@@ -180,6 +183,7 @@ impl V2TokenResource {
             TYPE_UNLIMITED_SUPPLY => Some(Self::UnlimitedSupply(write_resource.try_into()?)),
             TYPE_TOKEN_IDENTIFIERS => Some(Self::TokenIdentifiers(write_resource.try_into()?)),
             TYPE_PROPERTY_MAP => Some(Self::PropertyMapModel(write_resource.try_into()?)),
+            TYPE_ROYALTY => Some(Self::PropertyMapModel(write_resource.try_into()?)),
             _ => None,
         };
 
@@ -226,6 +230,12 @@ impl Resource for ObjectCore {
 impl Resource for PropertyMapModel {
     fn type_str() -> &'static str {
         TYPE_PROPERTY_MAP
+    }
+}
+
+impl Resource for Royalty {
+    fn type_str() -> &'static str {
+        TYPE_ROYALTY
     }
 }
 

@@ -1,8 +1,8 @@
 use crate::{
     models::{
         db::{
-            action::Action, bid::Bid, collection::Collection, contract::Contract, listing::Listing,
-            nft::Nft,
+            action::Action, bid::Bid, collection::Collection, commission::Commission,
+            contract::Contract, listing::Listing, nft::Nft,
         },
         marketplace::{BidModel, ListingModel, NftMarketplaceActivity},
     },
@@ -32,6 +32,7 @@ pub struct ReductionOutput {
     pub collections: Vec<Collection>,
     pub nfts: Vec<Nft>,
     pub contracts: Vec<Contract>,
+    pub commissions: Vec<Commission>,
 }
 
 impl NFTAccumulator {
@@ -180,6 +181,7 @@ impl Processable for NFTReductionStep {
             bids,
             listings,
             contracts,
+            commissions: input.data.commissions.clone(),
         };
 
         Ok(Some(TransactionContext {

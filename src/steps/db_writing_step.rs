@@ -66,6 +66,12 @@ impl Processable for DBWritingStep {
             &input.data.contracts,
             200,
         );
+        let commission_fut = execute_in_chunks(
+            self.db_pool.clone(),
+            insert_commissions,
+            &input.data.commissions,
+            200,
+        );
 
         let (
             action_result,
@@ -74,13 +80,15 @@ impl Processable for DBWritingStep {
             nft_result,
             collection_result,
             contract_result,
+            commissionn_result,
         ) = tokio::join!(
             action_fut,
             bid_fut,
             listing_fut,
             nft_fut,
             collection_fut,
-            contract_fut
+            contract_fut,
+            commission_fut,
         );
 
         for result in [
@@ -90,6 +98,7 @@ impl Processable for DBWritingStep {
             nft_result,
             collection_result,
             contract_result,
+            commissionn_result,
         ] {
             match result {
                 Ok(_) => (),
@@ -154,7 +163,7 @@ pub fn insert_commissions(
 
     diesel::insert_into(schema::commissions::table)
         .values(items_to_insert)
-        .on_conflict(contract_id)
+        .on_conflict(id)
         .do_nothing()
 }
 

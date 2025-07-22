@@ -1,4 +1,5 @@
 use crate::models::resources::{
+    royalty::Royalty,
     supply::{ConcurrentSupply, FixedSupply, UnlimitedSupply},
     token::{PropertyMapModel, Token, TokenIdentifiers},
     FromWriteResource,
@@ -20,6 +21,7 @@ pub struct ObjectAggregatedData {
     pub token: Option<Token>,
     pub token_identifiers: Option<TokenIdentifiers>,
     pub property_map: Option<PropertyMapModel>,
+    pub royalty: Option<Royalty>,
 }
 
 impl Default for ObjectAggregatedData {
@@ -39,6 +41,7 @@ impl Default for ObjectAggregatedData {
             token_identifiers: None,
             token: None,
             property_map: None,
+            royalty: None,
         }
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     models::{
-        db::{collection::Collection, contract::Contract, nft::Nft},
+        db::{collection::Collection, commission::Commission, contract::Contract, nft::Nft},
         marketplace::NftMarketplaceActivity,
         resources::{FromWriteResource, V2TokenResource},
     },
@@ -18,7 +18,6 @@ use uuid::Uuid;
 
 // TODO:
 // - Royalty
-// - Token property
 pub fn parse_token(
     transactions: &[Transaction],
 ) -> (
@@ -26,6 +25,7 @@ pub fn parse_token(
     Vec<Contract>,
     Vec<Collection>,
     Vec<Nft>,
+    Vec<Commission>,
 ) {
     let table_handler_to_owner =
         TableMetadataForToken::get_table_handle_to_owner_from_transactions(transactions);
@@ -37,6 +37,7 @@ pub fn parse_token(
     let mut current_collections: AHashMap<Option<Uuid>, Collection> = AHashMap::new();
     let mut current_nfts: AHashMap<Option<Uuid>, Nft> = AHashMap::new();
     let mut current_contracts: AHashMap<Option<Uuid>, Contract> = AHashMap::new();
+    let mut current_commissions: AHashMap<Option<Uuid>, Commission> = AHashMap::new();
 
     for txn in transactions {
         let txn_data = match txn.txn_data.as_ref() {
@@ -121,6 +122,9 @@ pub fn parse_token(
                             },
                             V2TokenResource::PropertyMapModel(property_map) => {
                                 aggregated_data.property_map = Some(property_map);
+                            },
+                            V2TokenResource::Royalty(royalty) => {
+                                aggregated_data.royalty = Some(royalty);
                             },
                             _ => {},
                         }
@@ -216,6 +220,13 @@ pub fn parse_token(
                     if let Some(nft) = nft_result {
                         current_nfts.insert(nft.id.clone(), nft);
                     }
+
+                    let commission_result =
+                        Commission::get_from_write_table_item(table_item, txn_version).unwrap();
+
+                    if let Some(commission) = commission_result {
+                        current_commissions.insert(commission.id.clone(), commission);
+                    }
                 },
                 Change::WriteResource(resource) => {
                     let contract_result = Contract::get_from_write_resource(resource).unwrap();
@@ -238,6 +249,14 @@ pub fn parse_token(
                     if let Some(nft) = nft_result {
                         current_nfts.insert(nft.id.clone(), nft.clone());
                     }
+
+                    let commission_result =
+                        Commission::get_from_write_resource(resource, &token_metadata_helper)
+                            .unwrap();
+
+                    if let Some(commission) = commission_result {
+                        current_commissions.insert(commission.id.clone(), commission.clone());
+                    }
                 },
                 _ => {},
             }
@@ -249,6 +268,9 @@ pub fn parse_token(
         .into_values()
         .collect::<Vec<Collection>>();
     let nfts = current_nfts.into_values().collect::<Vec<Nft>>();
+    let commissions = current_commissions
+        .into_values()
+        .collect::<Vec<Commission>>();
 
-    (activities, contracts, collections, nfts)
+    (activities, contracts, collections, nfts, commissions)
 }

@@ -1,4 +1,5 @@
 use aptos_protos::util::timestamp::Timestamp;
+use bigdecimal::{BigDecimal, Zero};
 use uuid::Uuid;
 
 pub mod marketplace_resource_utils;
@@ -18,6 +19,14 @@ pub fn parse_timestamp(ts: &Timestamp, version: i64) -> chrono::NaiveDateTime {
     #[allow(deprecated)]
     chrono::NaiveDateTime::from_timestamp_opt(final_ts.seconds, final_ts.nanos as u32)
         .unwrap_or_else(|| panic!("Could not parse timestamp {ts:?} for version {version}"))
+}
+
+pub fn calc_royalty(denominator: &BigDecimal, numerator: &BigDecimal) -> BigDecimal {
+    if denominator > &BigDecimal::zero() {
+        numerator / denominator * 100
+    } else {
+        BigDecimal::zero()
+    }
 }
 
 pub fn generate_uuid_from_str(value: &str) -> Uuid {
@@ -50,4 +59,8 @@ pub fn create_id_for_bid(contract_addr: &str, data_addr: &str, bid_id: &str) -> 
 
 pub fn create_id_for_listing(contract_addr: &str, token_addr: &str) -> Uuid {
     generate_uuid_from_str(&format!("{}::{}::listing", contract_addr, token_addr))
+}
+
+pub fn create_id_for_commission(data_addr: &str) -> Uuid {
+    generate_uuid_from_str(&format!("{}::commission", data_addr))
 }

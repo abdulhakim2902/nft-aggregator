@@ -90,7 +90,9 @@ diesel::table! {
     commissions (id) {
         id -> Uuid,
         royalty -> Nullable<Numeric>,
-        contract_id -> Uuid,
+        contract_id -> Nullable<Uuid>,
+        nft_id -> Nullable<Uuid>,
+        collection_id -> Nullable<Uuid>,
     }
 }
 

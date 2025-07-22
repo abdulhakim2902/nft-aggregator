@@ -2,7 +2,7 @@ use super::remappers::resource_remapper::ResourceMapper;
 use crate::{
     config::marketplace_config::NFTMarketplaceConfig,
     models::{
-        db::{collection::Collection, contract::Contract, nft::Nft},
+        db::{collection::Collection, commission::Commission, contract::Contract, nft::Nft},
         marketplace::NftMarketplaceActivity,
     },
     steps::{remappers::event_remapper::EventRemapper, token::token_processor_helper::parse_token},
@@ -27,6 +27,7 @@ pub struct RemappingOutput {
     pub contracts: Vec<Contract>,
     pub collections: Vec<Collection>,
     pub nfts: Vec<Nft>,
+    pub commissions: Vec<Commission>,
     pub marketplace_activities: Vec<Vec<NftMarketplaceActivity>>,
 }
 
@@ -72,7 +73,8 @@ impl Processable for ProcessStep {
         transactions: TransactionContext<Vec<Transaction>>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
         // Handle NFT Metadata and activity
-        let (token_activities, contracts, collections, nfts) = parse_token(&transactions.data);
+        let (token_activities, contracts, collections, nfts, commissions) =
+            parse_token(&transactions.data);
 
         // Handle NFT Marketplace Activity
         let results = self
@@ -114,6 +116,7 @@ impl Processable for ProcessStep {
             contracts,
             collections,
             nfts,
+            commissions,
             marketplace_activities,
         };
 
