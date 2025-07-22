@@ -3,7 +3,11 @@ use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::WriteResource,
     utils::{
         convert::{deserialize_from_string, standardize_address},
-        extract::{deserialize_property_map_from_bcs_hexstring, hash_str, DerivedStringSnapshot},
+        extract::{
+            deserialize_property_map_from_bcs_hexstring,
+            deserialize_token_object_property_map_from_bcs_hexstring, hash_str,
+            DerivedStringSnapshot,
+        },
     },
 };
 use bigdecimal::BigDecimal;
@@ -286,4 +290,19 @@ pub struct TokenStore {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PendingClaims {
     pub pending_claims: Table,
+}
+
+/* Section on Property Maps */
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PropertyMapModel {
+    #[serde(deserialize_with = "deserialize_token_object_property_map_from_bcs_hexstring")]
+    pub inner: serde_json::Value,
+}
+
+impl TryFrom<&WriteResource> for PropertyMapModel {
+    type Error = anyhow::Error;
+
+    fn try_from(write_resource: &WriteResource) -> anyhow::Result<Self> {
+        serde_json::from_str(write_resource.data.as_str()).map_err(anyhow::Error::msg)
+    }
 }

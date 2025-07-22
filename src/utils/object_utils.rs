@@ -1,6 +1,6 @@
 use crate::models::resources::{
     supply::{ConcurrentSupply, FixedSupply, UnlimitedSupply},
-    token::{Token, TokenIdentifiers},
+    token::{PropertyMapModel, Token, TokenIdentifiers},
     FromWriteResource,
 };
 use aptos_indexer_processor_sdk::{
@@ -19,6 +19,7 @@ pub struct ObjectAggregatedData {
     pub unlimited_supply: Option<UnlimitedSupply>,
     pub token: Option<Token>,
     pub token_identifiers: Option<TokenIdentifiers>,
+    pub property_map: Option<PropertyMapModel>,
 }
 
 impl Default for ObjectAggregatedData {
@@ -37,6 +38,7 @@ impl Default for ObjectAggregatedData {
             concurrent_supply: None,
             token_identifiers: None,
             token: None,
+            property_map: None,
         }
     }
 }

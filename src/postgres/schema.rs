@@ -140,6 +140,7 @@ diesel::table! {
         owner -> Nullable<Varchar>,
         contract_id -> Nullable<Uuid>,
         collection_id -> Nullable<Uuid>,
+        properties -> Nullable<Jsonb>,
         #[max_length = 128]
         token_id -> Nullable<Varchar>,
         burned -> Nullable<Bool>,

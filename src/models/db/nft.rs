@@ -35,6 +35,7 @@ pub struct Nft {
     pub collection_id: Option<Uuid>,
     pub contract_id: Option<Uuid>,
     pub burned: Option<bool>,
+    pub properties: Option<serde_json::Value>,
 }
 
 impl Nft {
@@ -56,6 +57,7 @@ impl Nft {
                 burned: None,
                 name: Some(inner.name),
                 media_url: Some(inner.uri),
+                properties: None,
             };
 
             if let Some(object_data) = object_metadata.get(&token_addr) {
@@ -68,7 +70,9 @@ impl Nft {
                     nft.name = Some(token_identifier.name.value.clone());
                 }
 
-                // TODO: Get token properties from 0x4::property_map::PropertyMap
+                if let Some(property_map) = object_data.property_map.as_ref() {
+                    nft.properties = Some(property_map.inner.clone());
+                }
             }
 
             return Ok(Some(nft));
@@ -129,6 +133,7 @@ impl Nft {
                         name: Some(token_data.name),
                         media_url: Some(token_data.uri),
                         contract_id: Some(contract_id),
+                        properties: Some(token_data.default_properties),
                     };
 
                     return Ok(Some(nft));

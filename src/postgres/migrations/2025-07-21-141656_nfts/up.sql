@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS nfts (
   owner VARCHAR(66),
   contract_id uuid DEFAULT NULL,
   collection_id uuid DEFAULT NULL,
-  -- Add nft properties
+  properties JSONB DEFAULT NULL,
   -- Add ranking BIGINT DEFAULT NULL,
   -- Add rarity NUMERIC(78, 12) DEFAULT NULL,
   -- Add staked BOOLEAN DEFAULT false,

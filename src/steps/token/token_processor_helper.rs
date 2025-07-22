@@ -16,6 +16,9 @@ use aptos_indexer_processor_sdk::{
 use tracing::warn;
 use uuid::Uuid;
 
+// TODO:
+// - Royalty
+// - Token property
 pub fn parse_token(
     transactions: &[Transaction],
 ) -> (
@@ -115,6 +118,9 @@ pub fn parse_token(
                             },
                             V2TokenResource::Token(token) => {
                                 aggregated_data.token = Some(token);
+                            },
+                            V2TokenResource::PropertyMapModel(property_map) => {
+                                aggregated_data.property_map = Some(property_map);
                             },
                             _ => {},
                         }
