@@ -33,6 +33,7 @@ pub struct Collection {
     pub description: Option<String>,
     pub cover_url: Option<String>,
     pub contract_id: Option<Uuid>,
+    pub floor: Option<i64>,
 }
 
 impl Collection {
@@ -73,6 +74,7 @@ impl Collection {
                     description: Some(collection_data.description.clone()),
                     supply: collection_data.supply.to_i64(),
                     cover_url: Some(collection_data.uri.clone()),
+                    floor: None,
                 };
 
                 return Ok(Some(collection));
@@ -97,6 +99,7 @@ impl Collection {
                 supply: None,
                 cover_url: Some(inner.uri),
                 contract_id: Some(contract_id.clone()),
+                floor: None,
             };
 
             if let Some(object) = object_metadata.get(&address) {

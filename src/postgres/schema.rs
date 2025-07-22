@@ -78,6 +78,7 @@ diesel::table! {
         supply -> Nullable<Int8>,
         #[max_length = 128]
         title -> Nullable<Varchar>,
+        floor -> Nullable<Int8>,
         description -> Nullable<Text>,
         #[max_length = 512]
         cover_url -> Nullable<Varchar>,

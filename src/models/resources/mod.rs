@@ -226,7 +226,7 @@ pub enum V1TokenResource {
 
 impl V1TokenResource {
     pub fn is_resource_supported(data_type: &str) -> bool {
-        [TYPE_COLLECTION_V1, TYPE_TOKEN_V2, TYPE_PENDING_TOKEN_V1].contains(&data_type)
+        [TYPE_COLLECTION_V1, TYPE_TOKEN_STORE_V1, TYPE_PENDING_TOKEN_V1].contains(&data_type)
     }
 
     pub fn from_resource(
