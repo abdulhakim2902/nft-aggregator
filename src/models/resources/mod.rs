@@ -7,7 +7,7 @@ use crate::{
     models::resources::{
         collection::Collection,
         supply::{ConcurrentSupply, FixedSupply, UnlimitedSupply},
-        token::{Token, TokenIdentifiers},
+        token::{Collection as CollectionV1, PendingClaims, Token, TokenIdentifiers, TokenStore},
     },
     utils::object_utils::ObjectCore,
 };
@@ -25,13 +25,17 @@ pub const TOKEN_V2_ADDR: &str =
     "0x0000000000000000000000000000000000000000000000000000000000000004";
 
 pub const TYPE_OBJECT_CORE: &str = formatcp!("{COIN_ADDR}::object::ObjectCore");
-pub const TYPE_COLLECTION: &str = formatcp!("{TOKEN_V2_ADDR}::collection::Collection");
+
+pub const TYPE_COLLECTION_V2: &str = formatcp!("{TOKEN_V2_ADDR}::collection::Collection");
+pub const TYPE_TOKEN_V2: &str = formatcp!("{TOKEN_V2_ADDR}::token::Token");
 pub const TYPE_CONCURRENT_SUPPLY: &str = formatcp!("{TOKEN_V2_ADDR}::collection::ConcurrentSupply");
 pub const TYPE_FIXED_SUPPLY: &str = formatcp!("{TOKEN_V2_ADDR}::collection::FixedSupply");
 pub const TYPE_UNLIMITED_SUPPLY: &str = formatcp!("{TOKEN_V2_ADDR}::collection::UnlimitedSupply");
-
-pub const TYPE_TOKEN_V2: &str = formatcp!("{TOKEN_V2_ADDR}::token::Token");
 pub const TYPE_TOKEN_IDENTIFIERS: &str = formatcp!("{TOKEN_V2_ADDR}::token::TokenIdentifiers");
+
+pub const TYPE_COLLECTION_V1: &str = formatcp!("{TOKEN_ADDR}::token::Collection");
+pub const TYPE_TOKEN_STORE_V1: &str = formatcp!("{TOKEN_ADDR}::token::TokenStore");
+pub const TYPE_PENDING_TOKEN_V1: &str = formatcp!("{TOKEN_ADDR}::token_transfers::PendingClaims");
 
 pub trait Resource {
     fn type_str() -> &'static str;
@@ -179,7 +183,7 @@ impl V2TokenResource {
 
 impl Resource for Collection {
     fn type_str() -> &'static str {
-        TYPE_COLLECTION
+        TYPE_COLLECTION_V2
     }
 }
 
@@ -210,5 +214,46 @@ impl Resource for Token {
 impl Resource for ObjectCore {
     fn type_str() -> &'static str {
         TYPE_OBJECT_CORE
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum V1TokenResource {
+    Collection(CollectionV1),
+    TokenStore(TokenStore),
+    PendingClaims(PendingClaims),
+}
+
+impl V1TokenResource {
+    pub fn is_resource_supported(data_type: &str) -> bool {
+        [TYPE_COLLECTION_V1, TYPE_TOKEN_V2, TYPE_PENDING_TOKEN_V1].contains(&data_type)
+    }
+
+    pub fn from_resource(
+        data_type: &str,
+        data: &serde_json::Value,
+        txn_version: i64,
+    ) -> Result<V1TokenResource> {
+        match data_type {
+            TYPE_COLLECTION_V1 => {
+                serde_json::from_value(data.clone())
+                    .map(|inner| Some(V1TokenResource::Collection(inner)))
+            },
+            TYPE_TOKEN_STORE_V1 => {
+                serde_json::from_value(data.clone())
+                    .map(|inner| Some(V1TokenResource::TokenStore(inner)))
+            },
+            TYPE_PENDING_TOKEN_V1 => {
+                serde_json::from_value(data.clone())
+                    .map(|inner| Some(V1TokenResource::PendingClaims(inner)))
+            },
+            _ => Ok(None),
+        }
+        .context(format!(
+            "version {txn_version} failed! failed to parse type {data_type}, data {data:?}"
+        ))?
+        .context(format!(
+            "Resource unsupported! Call is_resource_supported first. version {txn_version} type {data_type}"
+        ))
     }
 }

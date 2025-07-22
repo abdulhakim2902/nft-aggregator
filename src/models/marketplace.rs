@@ -159,7 +159,7 @@ impl NftMarketplaceActivity {
             .map(|e| generate_uuid_from_str(&e))
     }
 
-    pub fn get_nft_activitiy_from_token_event(
+    pub fn get_nft_v2_activitiy_from_token_event(
         event: &Event,
         txn_id: &str,
         txn_version: i64,

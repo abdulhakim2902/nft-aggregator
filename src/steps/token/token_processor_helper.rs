@@ -4,6 +4,7 @@ use crate::{
         marketplace::NftMarketplaceActivity,
         resources::{FromWriteResource, V2TokenResource},
     },
+    steps::token::token_utils::TableMetadataForToken,
     utils::object_utils::{ObjectAggregatedData, ObjectWithMetadata},
 };
 use ahash::AHashMap;
@@ -18,6 +19,9 @@ use uuid::Uuid;
 pub fn parse_token(
     transactions: &[Transaction],
 ) -> (Vec<NftMarketplaceActivity>, Vec<Collection>, Vec<Nft>) {
+    let table_handler_to_owner =
+        TableMetadataForToken::get_table_handle_to_owner_from_transactions(transactions);
+
     let mut token_metadata_helper: AHashMap<String, ObjectAggregatedData> = AHashMap::new();
 
     let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
@@ -112,7 +116,7 @@ pub fn parse_token(
         }
 
         for (index, event) in user_txn.events.iter().enumerate() {
-            let activity = NftMarketplaceActivity::get_nft_activitiy_from_token_event(
+            let activity = NftMarketplaceActivity::get_nft_v2_activitiy_from_token_event(
                 event,
                 &txn_id,
                 txn_version,
@@ -132,7 +136,12 @@ pub fn parse_token(
         for wsc in transaction_info.changes.iter() {
             match wsc.change.as_ref().unwrap() {
                 Change::WriteTableItem(table_item) => {
-                    let nft = Nft::get_from_write_table_item(table_item, txn_version).unwrap();
+                    let nft = Nft::get_from_write_table_item(
+                        table_item,
+                        txn_version,
+                        &table_handler_to_owner,
+                    )
+                    .unwrap();
 
                     if let Some(nft) = nft {
                         current_nfts.insert(nft.id.clone(), nft);

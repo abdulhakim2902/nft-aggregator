@@ -266,3 +266,30 @@ pub struct CollectionDataMutabilityConfigType {
     pub maximum: bool,
     pub uri: bool,
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Table {
+    handle: String,
+}
+
+impl Table {
+    pub fn get_handle(&self) -> String {
+        standardize_address(&self.handle)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Collection {
+    pub collection_data: Table,
+    pub token_data: Table,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TokenStore {
+    pub tokens: Table,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PendingClaims {
+    pub pending_claims: Table,
+}

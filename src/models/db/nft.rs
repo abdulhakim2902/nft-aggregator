@@ -1,9 +1,10 @@
 use crate::{
     models::resources::{
         token::{Token as TokenResourceData, TokenWriteSet},
-        FromWriteResource,
+        FromWriteResource, TYPE_TOKEN_STORE_V1,
     },
     schema::nfts,
+    steps::token::token_utils::TableMetadataForToken,
     utils::{generate_uuid_from_str, object_utils::ObjectAggregatedData},
 };
 use ahash::AHashMap;
@@ -78,6 +79,7 @@ impl Nft {
     pub fn get_from_write_table_item(
         table_item: &WriteTableItem,
         txn_version: i64,
+        table_handle_to_owner: &AHashMap<String, TableMetadataForToken>,
     ) -> Result<Option<Self>> {
         if let Some(table_item_data) = table_item.data.as_ref() {
             let maybe_token_data = match TokenWriteSet::from_table_item_type(
@@ -90,6 +92,7 @@ impl Nft {
             };
 
             if let Some(token_data) = maybe_token_data {
+                let table_handle = standardize_address(&table_item.handle.to_string());
                 let maybe_token_data_id = match TokenWriteSet::from_table_item_type(
                     &table_item_data.key_type,
                     &table_item_data.key,
@@ -100,6 +103,19 @@ impl Nft {
                 };
 
                 if let Some(token_data_id_struct) = maybe_token_data_id {
+                    let owner_address = match table_handle_to_owner.get(&table_handle) {
+                        Some(tm) if tm.table_type == TYPE_TOKEN_STORE_V1 => {
+                            Some(tm.get_owner_address())
+                        },
+                        _ => {
+                            None
+                            // token_v1_aggregated_events
+                            // .get(&token_data_id)
+                            // .and_then(|events| events.deposit_module_events.as_slice().last())
+                            // .and_then(|e| e.to_address.clone())
+                        },
+                    };
+
                     let nft_id = generate_uuid_from_str(&token_data_id_struct.to_id());
                     let collection_id =
                         generate_uuid_from_str(&token_data_id_struct.get_collection_id());
@@ -111,7 +127,7 @@ impl Nft {
                     let nft = Nft {
                         id: Some(nft_id),
                         token_id: Some(token_data.name.replace(" ", "%20")),
-                        owner: None,
+                        owner: owner_address,
                         collection_id: Some(collection_id),
                         burned: None,
                         name: Some(token_data.name),
