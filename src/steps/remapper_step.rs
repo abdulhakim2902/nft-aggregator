@@ -2,7 +2,7 @@ use super::remappers::resource_remapper::ResourceMapper;
 use crate::{
     config::marketplace_config::NFTMarketplaceConfig,
     models::{
-        db::{collection::Collection, commission::Commission, contract::Contract, nft::Nft},
+        db::{collection::Collection, commission::Commission, nft::Nft},
         marketplace::NftMarketplaceActivity,
         EventModel,
     },
@@ -28,7 +28,6 @@ pub struct Remapper {
 
 #[derive(Clone, Debug, Default)]
 pub struct RemappingOutput {
-    pub contracts: Vec<Contract>,
     pub collections: Vec<Collection>,
     pub nfts: Vec<Nft>,
     pub commissions: Vec<Commission>,
@@ -115,12 +114,11 @@ impl Processable for ProcessStep {
             }
         }
 
-        let (token_activities, contracts, collections, nfts, commissions) = token_remapper.drain();
+        let (token_activities, collections, nfts, commissions) = token_remapper.drain();
 
         marketplace_activities.push(token_activities);
 
         let output = RemappingOutput {
-            contracts,
             collections,
             nfts,
             commissions,

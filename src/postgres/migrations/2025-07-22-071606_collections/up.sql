@@ -1,6 +1,6 @@
 -- Your SQL goes here
 CREATE TABLE IF NOT EXISTS collections (
-  id uuid NOT NULL,
+  id VARCHAR(66) NOT NULL,
   slug VARCHAR(66) UNIQUE,
   supply BIGINT DEFAULT 0,
   title VARCHAR(128),
@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS collections (
   -- Add discord VARCHAR(66),
   description TEXT,
   cover_url VARCHAR(512),
-  contract_id uuid DEFAULT NULL,
   PRIMARY KEY (id)
 );
 

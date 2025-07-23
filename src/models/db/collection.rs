@@ -5,10 +5,7 @@ use crate::{
         FromWriteResource,
     },
     schema::collections,
-    utils::{
-        create_id_for_collection, create_id_for_contract, object_utils::ObjectAggregatedData,
-        token_utils::TableMetadataForToken,
-    },
+    utils::{object_utils::ObjectAggregatedData, token_utils::TableMetadataForToken},
 };
 use ahash::AHashMap;
 use anyhow::Result;
@@ -20,7 +17,6 @@ use bigdecimal::ToPrimitive;
 use diesel::prelude::*;
 use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(
     Clone, Debug, Default, Deserialize, FieldCount, Identifiable, Insertable, Serialize, Queryable,
@@ -28,13 +24,12 @@ use uuid::Uuid;
 #[diesel(primary_key(id))]
 #[diesel(table_name = collections)]
 pub struct Collection {
-    pub id: Option<Uuid>,
+    pub id: String,
     pub slug: Option<String>,
     pub supply: Option<i64>,
     pub title: Option<String>,
     pub description: Option<String>,
     pub cover_url: Option<String>,
-    pub contract_id: Option<Uuid>,
     pub floor: Option<i64>,
 }
 
@@ -66,12 +61,12 @@ impl Collection {
                     CollectionDataIdType::new(creator_address, collection_data.name.clone());
 
                 let collection_addr = collection_id_struct.to_addr();
-                let contract_id = create_id_for_contract(&collection_addr);
+
+                // TODO: collection slug
 
                 let collection = Collection {
-                    id: Some(create_id_for_collection(&collection_addr)),
+                    id: collection_addr.clone(),
                     slug: Some(collection_addr),
-                    contract_id: Some(contract_id),
                     title: Some(collection_data.name.clone()),
                     description: Some(collection_data.description.clone()),
                     supply: collection_data.supply.to_i64(),
@@ -91,16 +86,15 @@ impl Collection {
         object_metadata: &AHashMap<String, ObjectAggregatedData>,
     ) -> Result<Option<Self>> {
         if let Some(inner) = CollectionResourceData::from_write_resource(wr)? {
+            // TODO: collection slug
             let address = standardize_address(&wr.address);
-            let contract_id = create_id_for_contract(&address);
             let mut collection = Collection {
-                id: Some(create_id_for_collection(&address)),
+                id: address.clone(),
                 slug: Some(address.clone()),
                 title: Some(inner.name),
                 description: Some(inner.description),
                 supply: None,
                 cover_url: Some(inner.uri),
-                contract_id: Some(contract_id.clone()),
                 floor: None,
             };
 

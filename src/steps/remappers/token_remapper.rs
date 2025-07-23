@@ -1,6 +1,6 @@
 use crate::{
     models::{
-        db::{collection::Collection, commission::Commission, contract::Contract, nft::Nft},
+        db::{collection::Collection, commission::Commission, nft::Nft},
         marketplace::NftMarketplaceActivity,
         resources::{FromWriteResource, V2TokenResource},
         EventModel,
@@ -21,9 +21,8 @@ use uuid::Uuid;
 pub struct TokenRemapper {
     token_activities: Vec<NftMarketplaceActivity>,
     token_metadata_helper: AHashMap<String, ObjectAggregatedData>,
-    current_collections: AHashMap<Option<Uuid>, Collection>,
-    current_nfts: AHashMap<Option<Uuid>, Nft>,
-    current_contracts: AHashMap<Option<Uuid>, Contract>,
+    current_collections: AHashMap<String, Collection>,
+    current_nfts: AHashMap<String, Nft>,
     current_commissions: AHashMap<Option<Uuid>, Commission>,
     deposit_event_owner: AHashMap<String, String>,
     table_metadata_handler: AHashMap<String, TableMetadataForToken>,
@@ -36,7 +35,6 @@ impl TokenRemapper {
             token_metadata_helper: AHashMap::new(),
             current_collections: AHashMap::new(),
             current_nfts: AHashMap::new(),
-            current_contracts: AHashMap::new(),
             current_commissions: AHashMap::new(),
             deposit_event_owner: AHashMap::new(),
             table_metadata_handler: table_handler,
@@ -162,17 +160,6 @@ impl TokenRemapper {
         for wsc in txn_info.changes.iter() {
             match wsc.change.as_ref().unwrap() {
                 Change::WriteTableItem(table_item) => {
-                    let contract_result = Contract::get_from_write_table_item(
-                        table_item,
-                        txn_version,
-                        &self.table_metadata_handler,
-                    )
-                    .unwrap();
-
-                    if let Some(contract) = contract_result {
-                        self.current_contracts.insert(contract.id.clone(), contract);
-                    }
-
                     let collection_result = Collection::get_from_write_table_item(
                         table_item,
                         txn_version,
@@ -206,12 +193,6 @@ impl TokenRemapper {
                     }
                 },
                 Change::WriteResource(resource) => {
-                    let contract_result = Contract::get_from_write_resource(resource).unwrap();
-
-                    if let Some(contract) = contract_result {
-                        self.current_contracts.insert(contract.id.clone(), contract);
-                    }
-
                     let colletion_result =
                         Collection::get_from_write_resource(resource, &self.token_metadata_helper)
                             .unwrap();
@@ -247,14 +228,12 @@ impl TokenRemapper {
         &mut self,
     ) -> (
         Vec<NftMarketplaceActivity>,
-        Vec<Contract>,
         Vec<Collection>,
         Vec<Nft>,
         Vec<Commission>,
     ) {
         (
             mem::take(&mut self.token_activities),
-            self.current_contracts.drain().map(|(_, v)| v).collect(),
             self.current_collections.drain().map(|(_, v)| v).collect(),
             self.current_nfts.drain().map(|(_, v)| v).collect(),
             self.current_commissions.drain().map(|(_, v)| v).collect(),

@@ -2,7 +2,7 @@ use crate::{
     models::{
         db::{
             action::Action, bid::Bid, collection::Collection, commission::Commission,
-            contract::Contract, listing::Listing, nft::Nft,
+            listing::Listing, nft::Nft,
         },
         marketplace::{BidModel, ListingModel, NftMarketplaceActivity},
     },
@@ -14,14 +14,16 @@ use aptos_indexer_processor_sdk::{
     utils::errors::ProcessorError,
 };
 use std::collections::HashMap;
-use uuid::Uuid;
+
+pub type BidIdType = (Option<String>, Option<String>);
+
+pub type ListingIdType = (Option<String>, Option<String>);
 
 #[derive(Clone, Debug, Default)]
 pub struct NFTAccumulator {
     actions: HashMap<i64, Action>,
-    bids: HashMap<Option<Uuid>, Bid>,
-    listings: HashMap<Option<Uuid>, Listing>,
-    market_contracts: HashMap<Option<Uuid>, Contract>,
+    bids: HashMap<BidIdType, Bid>,
+    listings: HashMap<ListingIdType, Listing>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -31,7 +33,6 @@ pub struct ReductionOutput {
     pub listings: Vec<Listing>,
     pub collections: Vec<Collection>,
     pub nfts: Vec<Nft>,
-    pub contracts: Vec<Contract>,
     pub commissions: Vec<Commission>,
 }
 
@@ -46,7 +47,7 @@ impl NFTAccumulator {
     pub fn fold_bidding(&mut self, activity: &NftMarketplaceActivity) {
         if activity.is_valid_bid() {
             let bid: Bid = activity.to_owned().into();
-            let key = bid.id;
+            let key = (bid.market_contract_id.clone(), bid.nonce.clone());
             self.bids
                 .entry(key)
                 .and_modify(|existing: &mut Bid| {
@@ -84,7 +85,7 @@ impl NFTAccumulator {
     pub fn fold_listing(&mut self, activity: &NftMarketplaceActivity) {
         if activity.is_valid_listing() {
             let listing: Listing = activity.to_owned().into();
-            let key = listing.id;
+            let key = (listing.market_contract_id.clone(), listing.nft_id.clone());
             self.listings
                 .entry(key)
                 .and_modify(|existing: &mut Listing| {
@@ -98,7 +99,6 @@ impl NFTAccumulator {
                         existing.block_time = listing.block_time.clone();
                         existing.listed = listing.listed.clone();
                         existing.block_height = listing.block_height.clone();
-                        existing.commission_id = listing.commission_id.clone();
                         existing.nft_id = listing.nft_id.clone();
                         existing.nonce = listing.nonce.clone();
                         existing.price = listing.price.clone();
@@ -119,19 +119,11 @@ impl NFTAccumulator {
         }
     }
 
-    pub fn fold_market_contract(&mut self, activity: &NftMarketplaceActivity) {
-        if let Some(contract) = Contract::new_market_contract_from_activity(activity) {
-            let key = contract.id;
-            self.market_contracts.insert(key, contract);
-        }
-    }
-
-    pub fn drain(&mut self) -> (Vec<Action>, Vec<Bid>, Vec<Listing>, Vec<Contract>) {
+    pub fn drain(&mut self) -> (Vec<Action>, Vec<Bid>, Vec<Listing>) {
         (
             self.actions.drain().map(|(_, v)| v).collect(),
             self.bids.drain().map(|(_, v)| v).collect(),
             self.listings.drain().map(|(_, v)| v).collect(),
-            self.market_contracts.drain().map(|(_, v)| v).collect(),
         )
     }
 }
@@ -170,18 +162,15 @@ impl Processable for NFTReductionStep {
             }
         }
 
-        let (actions, bids, listings, mut contracts) = self.accumulator.drain();
-
-        contracts.extend(input.data.contracts);
+        let (actions, bids, listings) = self.accumulator.drain();
 
         let output = ReductionOutput {
             collections: input.data.collections.clone(),
             nfts: input.data.nfts.clone(),
+            commissions: input.data.commissions.clone(),
             actions,
             bids,
             listings,
-            contracts,
-            commissions: input.data.commissions.clone(),
         };
 
         Ok(Some(TransactionContext {

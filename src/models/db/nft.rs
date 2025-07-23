@@ -4,10 +4,7 @@ use crate::{
         FromWriteResource, TYPE_TOKEN_STORE_V1,
     },
     schema::nfts,
-    utils::{
-        create_id_for_collection, create_id_for_contract, create_id_for_nft,
-        object_utils::ObjectAggregatedData, token_utils::TableMetadataForToken,
-    },
+    utils::{object_utils::ObjectAggregatedData, token_utils::TableMetadataForToken},
 };
 use ahash::{AHashMap, HashMap};
 use anyhow::Result;
@@ -18,7 +15,6 @@ use aptos_indexer_processor_sdk::{
 use diesel::prelude::*;
 use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(
     Clone, Debug, Default, Deserialize, FieldCount, Identifiable, Insertable, Serialize, Queryable,
@@ -26,15 +22,22 @@ use uuid::Uuid;
 #[diesel(primary_key(id))]
 #[diesel(table_name = nfts)]
 pub struct Nft {
-    pub id: Option<Uuid>,
-    pub media_url: Option<String>,
+    pub id: String,
     pub name: Option<String>,
     pub owner: Option<String>,
-    pub token_id: Option<String>,
-    pub collection_id: Option<Uuid>,
-    pub contract_id: Option<Uuid>,
+    pub collection_id: Option<String>,
     pub burned: Option<bool>,
-    pub properties: Option<serde_json::Value>,
+    pub attributes: Option<serde_json::Value>,
+    pub description: Option<String>,
+    pub background_color: Option<String>,
+    pub media_url: Option<String>,
+    pub image_data: Option<String>,
+    pub animation_url: Option<String>,
+    pub youtube_url: Option<String>,
+    pub avatar_url: Option<String>,
+    pub external_url: Option<String>,
+    pub image_url: Option<String>,
+    pub version: String,
 }
 
 impl Nft {
@@ -44,19 +47,15 @@ impl Nft {
     ) -> Result<Option<Self>> {
         if let Some(inner) = TokenResourceData::from_write_resource(wr)? {
             let token_addr = standardize_address(&wr.address);
-            let contract_id = create_id_for_contract(&inner.get_collection_address());
-            let collection_id = create_id_for_collection(&inner.get_collection_address());
 
             let mut nft = Nft {
-                id: Some(create_id_for_nft(&token_addr)),
-                owner: None,
-                token_id: Some(token_addr.clone()),
-                collection_id: Some(collection_id),
-                contract_id: Some(contract_id),
-                burned: None,
+                id: token_addr.clone(),
+                collection_id: Some(inner.get_collection_address()),
                 name: Some(inner.name),
                 media_url: Some(inner.uri),
-                properties: None,
+                description: Some(inner.description),
+                version: "v2".to_string(),
+                ..Default::default()
             };
 
             if let Some(object_data) = object_metadata.get(&token_addr) {
@@ -70,7 +69,7 @@ impl Nft {
                 }
 
                 if let Some(property_map) = object_data.property_map.as_ref() {
-                    nft.properties = Some(property_map.inner.clone());
+                    nft.attributes = Some(property_map.inner.clone());
                 }
             }
 
@@ -117,22 +116,16 @@ impl Nft {
                             .cloned(),
                     };
 
-                    let nft_id = create_id_for_nft(&token_data_id_struct.to_addr());
-                    let collection_id =
-                        create_id_for_collection(&token_data_id_struct.get_collection_addr());
-                    let contract_id =
-                        create_id_for_contract(&token_data_id_struct.get_collection_addr());
-
                     let nft = Nft {
-                        id: Some(nft_id),
-                        token_id: Some(token_data.name.replace(" ", "%20")),
+                        id: token_data_id_struct.to_addr(),
                         owner: owner_address,
-                        collection_id: Some(collection_id),
-                        burned: None,
+                        collection_id: Some(token_data_id_struct.get_collection_addr()),
                         name: Some(token_data.name),
                         media_url: Some(token_data.uri),
-                        contract_id: Some(contract_id),
-                        properties: Some(token_data.default_properties),
+                        attributes: Some(token_data.default_properties),
+                        description: Some(token_data.description),
+                        version: "v1".to_string(),
+                        ..Default::default()
                     };
 
                     return Ok(Some(nft));

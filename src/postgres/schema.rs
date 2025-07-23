@@ -1,8 +1,7 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    actions (id) {
-        id -> Uuid,
+    actions (tx_index, tx_id) {
         #[max_length = 30]
         tx_type -> Varchar,
         tx_index -> Int8,
@@ -13,12 +12,14 @@ diesel::table! {
         #[max_length = 66]
         receiver -> Nullable<Varchar>,
         price -> Nullable<Int8>,
-        nft_id -> Nullable<Uuid>,
-        contract_id -> Nullable<Uuid>,
-        collection_id -> Nullable<Uuid>,
+        #[max_length = 66]
+        nft_id -> Nullable<Varchar>,
+        #[max_length = 66]
+        collection_id -> Nullable<Varchar>,
         #[max_length = 30]
         market_name -> Nullable<Varchar>,
-        market_contract_id -> Nullable<Uuid>,
+        #[max_length = 66]
+        market_contract_id -> Nullable<Varchar>,
         usd_price -> Nullable<Numeric>,
         block_time -> Timestamptz,
         block_height -> Int8,
@@ -40,23 +41,26 @@ diesel::table! {
 }
 
 diesel::table! {
-    bids (id) {
-        id -> Uuid,
+    bids (market_contract_id, nonce) {
         #[max_length = 66]
         bidder -> Varchar,
         #[max_length = 66]
         accepted_tx_id -> Nullable<Varchar>,
         #[max_length = 66]
         canceled_tx_id -> Nullable<Varchar>,
-        collection_id -> Nullable<Uuid>,
-        contract_id -> Nullable<Uuid>,
+        #[max_length = 66]
+        collection_id -> Nullable<Varchar>,
         #[max_length = 66]
         created_tx_id -> Nullable<Varchar>,
         expires_at -> Nullable<Timestamptz>,
-        market_contract_id -> Nullable<Uuid>,
+        #[max_length = 66]
+        market_contract_id -> Varchar,
         #[max_length = 128]
-        nonce -> Nullable<Varchar>,
-        nft_id -> Nullable<Uuid>,
+        market_name -> Nullable<Varchar>,
+        #[max_length = 128]
+        nonce -> Varchar,
+        #[max_length = 66]
+        nft_id -> Nullable<Varchar>,
         price -> Nullable<Int8>,
         #[max_length = 128]
         price_str -> Nullable<Varchar>,
@@ -72,7 +76,8 @@ diesel::table! {
 
 diesel::table! {
     collections (id) {
-        id -> Uuid,
+        #[max_length = 66]
+        id -> Varchar,
         #[max_length = 66]
         slug -> Nullable<Varchar>,
         supply -> Nullable<Int8>,
@@ -82,7 +87,6 @@ diesel::table! {
         description -> Nullable<Text>,
         #[max_length = 512]
         cover_url -> Nullable<Varchar>,
-        contract_id -> Nullable<Uuid>,
     }
 }
 
@@ -90,33 +94,21 @@ diesel::table! {
     commissions (id) {
         id -> Uuid,
         royalty -> Nullable<Numeric>,
-        contract_id -> Nullable<Uuid>,
-        nft_id -> Nullable<Uuid>,
-        collection_id -> Nullable<Uuid>,
+        #[max_length = 664]
+        nft_id -> Nullable<Varchar>,
+        #[max_length = 664]
+        collection_id -> Nullable<Varchar>,
     }
 }
 
 diesel::table! {
-    contracts (id) {
-        id -> Uuid,
-        #[max_length = 128]
-        key -> Varchar,
-        #[max_length = 30]
-        type_ -> Varchar,
-        #[max_length = 30]
-        name -> Nullable<Varchar>,
-    }
-}
-
-diesel::table! {
-    listings (id) {
-        id -> Uuid,
+    listings (market_contract_id, nft_id) {
         block_height -> Nullable<Int8>,
         block_time -> Timestamptz,
-        commission_id -> Nullable<Uuid>,
-        contract_id -> Nullable<Uuid>,
-        market_contract_id -> Nullable<Uuid>,
-        nft_id -> Uuid,
+        #[max_length = 66]
+        market_contract_id -> Varchar,
+        #[max_length = 66]
+        nft_id -> Varchar,
         listed -> Nullable<Bool>,
         #[max_length = 128]
         market_name -> Nullable<Varchar>,
@@ -133,19 +125,27 @@ diesel::table! {
 
 diesel::table! {
     nfts (id) {
-        id -> Uuid,
-        #[max_length = 512]
-        media_url -> Nullable<Varchar>,
+        #[max_length = 66]
+        id -> Varchar,
         #[max_length = 128]
         name -> Nullable<Varchar>,
         #[max_length = 66]
         owner -> Nullable<Varchar>,
-        contract_id -> Nullable<Uuid>,
-        collection_id -> Nullable<Uuid>,
-        properties -> Nullable<Jsonb>,
-        #[max_length = 128]
-        token_id -> Nullable<Varchar>,
+        #[max_length = 66]
+        collection_id -> Nullable<Varchar>,
+        attributes -> Nullable<Jsonb>,
+        media_url -> Nullable<Varchar>,
+        image_data -> Nullable<Varchar>,
+        avatar_url -> Nullable<Varchar>,
+        image_url -> Nullable<Varchar>,
+        external_url -> Nullable<Varchar>,
+        description -> Nullable<Varchar>,
+        background_color -> Nullable<Varchar>,
+        animation_url -> Nullable<Varchar>,
+        youtube_url -> Nullable<Varchar>,
         burned -> Nullable<Bool>,
+        #[max_length = 10]
+        version -> Nullable<Varchar>,
     }
 }
 
@@ -165,7 +165,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     bids,
     collections,
     commissions,
-    contracts,
     listings,
     nfts,
     processor_status,

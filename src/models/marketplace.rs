@@ -5,8 +5,6 @@ use crate::{
         EventModel,
     },
     utils::{
-        create_id_for_action, create_id_for_bid, create_id_for_collection, create_id_for_contract,
-        create_id_for_listing, create_id_for_market_contract, create_id_for_nft,
         object_utils::ObjectAggregatedData,
         token_utils::{TokenEvent, V2TokenEvent},
     },
@@ -20,7 +18,6 @@ use aptos_indexer_processor_sdk::{
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
-use uuid::Uuid;
 
 pub const DEFAULT_SELLER: &str = "unknown";
 pub const DEFAULT_BUYER: &str = "unknown";
@@ -65,14 +62,12 @@ pub struct NftMarketplaceActivity {
 impl From<NftMarketplaceActivity> for Action {
     fn from(value: NftMarketplaceActivity) -> Self {
         Self {
-            id: Some(value.get_id()),
-            tx_index: Some(value.get_tx_index()),
-            collection_id: value.get_collection_id(),
-            contract_id: value.get_contract_id(),
-            nft_id: value.get_nft_id(),
-            market_contract_id: value.get_market_contract_id(),
-            tx_id: Some(value.txn_id),
+            tx_index: value.get_tx_index(),
+            market_contract_id: value.contract_address,
+            tx_id: value.txn_id,
+            nft_id: value.token_addr,
             tx_type: Some(value.standard_event_type.to_string()),
+            collection_id: value.collection_addr,
             sender: value.seller,
             receiver: value.buyer,
             price: Some(value.price),
@@ -88,16 +83,15 @@ impl From<NftMarketplaceActivity> for Action {
 impl From<NftMarketplaceActivity> for Bid {
     fn from(value: NftMarketplaceActivity) -> Self {
         Self {
-            id: value.get_bid_id(),
-            market_contract_id: value.get_market_contract_id(),
-            contract_id: value.get_contract_id(),
-            collection_id: value.get_collection_id(),
-            nft_id: value.get_nft_id(),
             created_tx_id: value.get_created_txn_id(),
             accepted_tx_id: value.get_accepted_txn_id(),
             canceled_tx_id: value.get_cancelled_txn_id(),
             bid_type: value.get_bid_type(),
             status: value.get_bid_status(),
+            market_contract_id: value.contract_address,
+            market_name: value.marketplace,
+            collection_id: value.collection_addr,
+            nft_id: value.token_addr,
             price: Some(value.price),
             price_str: Some(value.price.to_string()),
             expires_at: value.expiration_time,
@@ -112,12 +106,10 @@ impl From<NftMarketplaceActivity> for Bid {
 impl From<NftMarketplaceActivity> for Listing {
     fn from(value: NftMarketplaceActivity) -> Self {
         Self {
-            id: value.get_listing_id(),
             tx_index: Some(value.get_tx_index()),
-            contract_id: value.get_contract_id(),
-            market_contract_id: value.get_market_contract_id(),
-            nft_id: value.get_nft_id(),
             listed: value.get_listing_status(),
+            market_contract_id: value.contract_address,
+            nft_id: value.token_addr,
             market_name: value.marketplace,
             seller: value.seller,
             price: Some(value.price),
@@ -125,42 +117,13 @@ impl From<NftMarketplaceActivity> for Listing {
             block_time: Some(value.block_timestamp),
             nonce: value.listing_id,
             block_height: Some(value.block_height),
-            // TODO: handle commission_id
-            commission_id: None,
         }
     }
 }
 
 impl NftMarketplaceActivity {
-    pub fn get_id(&self) -> Uuid {
-        create_id_for_action(&self.get_tx_index().to_string())
-    }
-
     pub fn get_tx_index(&self) -> i64 {
         self.txn_version * 100_000 + self.index
-    }
-
-    pub fn get_market_contract_id(&self) -> Option<Uuid> {
-        self.contract_address
-            .as_ref()
-            .zip(self.marketplace.as_ref())
-            .map(|(c, m)| create_id_for_market_contract(c, m))
-    }
-
-    pub fn get_contract_id(&self) -> Option<Uuid> {
-        self.collection_addr
-            .as_ref()
-            .map(|c| create_id_for_contract(c))
-    }
-
-    pub fn get_collection_id(&self) -> Option<Uuid> {
-        self.collection_addr
-            .as_ref()
-            .map(|c| create_id_for_collection(c))
-    }
-
-    pub fn get_nft_id(&self) -> Option<Uuid> {
-        self.token_addr.as_ref().map(|t| create_id_for_nft(t))
     }
 
     pub fn get_nft_v1_activity_from_token_event(
@@ -422,44 +385,7 @@ impl MarketplaceModel for NftMarketplaceActivity {
 
 impl BidModel for NftMarketplaceActivity {
     fn is_valid_bid(&self) -> bool {
-        if let Some(bid_type) = self.get_bid_type() {
-            let bid_id = self.get_bid_id();
-            if bid_type.as_str() == "solo" {
-                bid_id.is_some() && self.buyer.is_some()
-            } else if bid_type.as_str() == "collection" {
-                bid_id.is_some()
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
-
-    fn get_bid_id(&self) -> Option<Uuid> {
-        if let Some(type_) = self.get_bid_type() {
-            if type_.as_str() == "solo" {
-                self.offer_id
-                    .as_ref()
-                    .zip(self.token_addr.as_ref().zip(self.contract_address.as_ref()))
-                    .map(|(offer_id, (token_addr, contract_addr))| {
-                        create_id_for_bid(contract_addr, token_addr, offer_id)
-                    })
-            } else {
-                self.offer_id
-                    .as_ref()
-                    .zip(
-                        self.collection_addr
-                            .as_ref()
-                            .zip(self.contract_address.as_ref()),
-                    )
-                    .map(|(offer_id, (collection_addr, contract_addr))| {
-                        create_id_for_bid(contract_addr, collection_addr, offer_id)
-                    })
-            }
-        } else {
-            None
-        }
+        self.contract_address.is_some() && self.offer_id.is_some()
     }
 
     fn get_bid_status(&self) -> Option<String> {
@@ -519,14 +445,9 @@ impl BidModel for NftMarketplaceActivity {
 
 impl ListingModel for NftMarketplaceActivity {
     fn is_valid_listing(&self) -> bool {
-        self.get_listing_id().is_some() && self.get_listing_status().is_some()
-    }
-
-    fn get_listing_id(&self) -> Option<Uuid> {
-        self.contract_address
-            .as_ref()
-            .zip(self.token_addr.as_ref())
-            .map(|(c, t)| create_id_for_listing(c, t))
+        self.contract_address.is_some()
+            && self.token_addr.is_some()
+            && self.get_listing_status().is_some()
     }
 
     fn get_listing_status(&self) -> Option<bool> {
@@ -575,7 +496,6 @@ pub trait MarketplaceModel {
 }
 
 pub trait BidModel {
-    fn get_bid_id(&self) -> Option<Uuid>;
     fn get_bid_status(&self) -> Option<String>;
     fn get_bid_type(&self) -> Option<String>;
     fn get_created_txn_id(&self) -> Option<String>;
@@ -585,7 +505,6 @@ pub trait BidModel {
 }
 
 pub trait ListingModel {
-    fn get_listing_id(&self) -> Option<Uuid>;
     fn get_listing_status(&self) -> Option<bool>;
     fn is_valid_listing(&self) -> bool;
 }

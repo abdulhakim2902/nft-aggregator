@@ -5,10 +5,7 @@ use crate::{
         FromWriteResource,
     },
     schema::commissions,
-    utils::{
-        calc_royalty, create_id_for_collection, create_id_for_commission, create_id_for_contract,
-        create_id_for_nft, object_utils::ObjectAggregatedData,
-    },
+    utils::{calc_royalty, create_id_for_commission, object_utils::ObjectAggregatedData},
 };
 use ahash::AHashMap;
 use anyhow::Result;
@@ -30,9 +27,8 @@ use uuid::Uuid;
 pub struct Commission {
     pub id: Option<Uuid>,
     pub royalty: Option<BigDecimal>,
-    pub contract_id: Option<Uuid>,
-    pub nft_id: Option<Uuid>,
-    pub collection_id: Option<Uuid>,
+    pub nft_id: Option<String>,
+    pub collection_id: Option<String>,
 }
 
 impl Commission {
@@ -71,11 +67,8 @@ impl Commission {
                         &royalty_points_denominator,
                         &royalty_points_numerator,
                     )),
-                    contract_id: Some(create_id_for_contract(&token_data_id.get_collection_addr())),
-                    collection_id: Some(create_id_for_collection(
-                        &token_data_id.get_collection_addr(),
-                    )),
-                    nft_id: Some(create_id_for_nft(&token_data_id.to_addr())),
+                    collection_id: Some(token_data_id.get_collection_addr()),
+                    nft_id: Some(token_data_id.to_addr()),
                 };
 
                 return Ok(Some(commission));
@@ -95,9 +88,8 @@ impl Commission {
                     let commission = Commission {
                         id: Some(create_id_for_commission(&address)),
                         royalty: Some(calc_royalty(&royalty.denominator, &royalty.numerator)),
-                        contract_id: Some(create_id_for_contract(&address)),
                         nft_id: None,
-                        collection_id: Some(create_id_for_collection(&address)),
+                        collection_id: Some(address),
                     };
 
                     return Ok(Some(commission));
@@ -111,11 +103,8 @@ impl Commission {
                     let commission = Commission {
                         id: Some(create_id_for_commission(&address)),
                         royalty: Some(calc_royalty(&royalty.denominator, &royalty.numerator)),
-                        contract_id: Some(create_id_for_contract(&inner.get_collection_address())),
-                        nft_id: Some(create_id_for_nft(&address)),
-                        collection_id: Some(create_id_for_collection(
-                            &inner.get_collection_address(),
-                        )),
+                        nft_id: Some(address),
+                        collection_id: Some(inner.get_collection_address()),
                     };
 
                     return Ok(Some(commission));

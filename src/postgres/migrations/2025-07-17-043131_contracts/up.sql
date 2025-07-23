@@ -1,8 +1,0 @@
--- Your SQL goes here
-CREATE TABLE IF NOT EXISTS contracts (
-  id uuid NOT NULL,
-  key VARCHAR(128) UNIQUE NOT NULL,
-  type_ VARCHAR(30) NOT NULL,
-  name VARCHAR(30) DEFAULT NULL,
-  PRIMARY KEY (id)
-)
