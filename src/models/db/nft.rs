@@ -4,10 +4,9 @@ use crate::{
         FromWriteResource, TYPE_TOKEN_STORE_V1,
     },
     schema::nfts,
-    steps::token::token_utils::TableMetadataForToken,
     utils::{
         create_id_for_collection, create_id_for_contract, create_id_for_nft,
-        object_utils::ObjectAggregatedData,
+        object_utils::ObjectAggregatedData, token_utils::TableMetadataForToken,
     },
 };
 use ahash::{AHashMap, HashMap};

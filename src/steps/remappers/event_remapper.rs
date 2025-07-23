@@ -9,11 +9,7 @@ use crate::{
     steps::{remappers::TableType, HashableJsonPath},
 };
 use anyhow::Result;
-use aptos_indexer_processor_sdk::{
-    aptos_indexer_transaction_stream::utils::time::parse_timestamp,
-    aptos_protos::transaction::v1::{transaction::TxnData, Transaction},
-    utils::{convert::standardize_address, extract::hash_str},
-};
+use aptos_indexer_processor_sdk::utils::{convert::standardize_address, extract::hash_str};
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 use tracing::{debug, warn};
 
@@ -61,173 +57,135 @@ impl EventRemapper {
     /// 3. Creates marketplace activity for event
     /// 4. Updates current models (listings, token offers, collection offers)
     /// 5. Generate necessary id fields for models that don't have an id if possible
-    pub fn remap_events(&self, txn: Transaction) -> Result<Vec<NftMarketplaceActivity>> {
+    pub fn remap_events(
+        &self,
+        txn_id: &str,
+        events: &[EventModel],
+    ) -> Result<Vec<NftMarketplaceActivity>> {
         let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
 
-        if let Some(txn_info) = txn.info.as_ref() {
-            let txn_id = format!("0x{}", hex::encode(txn_info.hash.clone()));
-            let txn_ts =
-                parse_timestamp(txn.timestamp.as_ref().unwrap(), txn.version as i64).naive_utc();
+        for event in events {
+            let event_type_str = event.event_type.to_string();
 
-            let events = self.get_events(Arc::new(txn))?;
+            // Handle nft activity event
+            if let Some(remappings) = self.field_remappings.get(&event.event_type) {
+                let event_type = self.marketplace_event_type_mapping.get(&event_type_str);
 
-            for event in events.iter() {
-                let event_type_str = event.event_type.to_string();
+                if let Some(event_type) = event_type.cloned() {
+                    let mut activity = NftMarketplaceActivity {
+                        marketplace: Some(self.marketplace_name.clone()),
+                        txn_id: txn_id.to_string(),
+                        txn_version: event.transaction_version,
+                        index: event.event_index,
+                        contract_address: Some(event.account_address.clone()),
+                        block_timestamp: event.block_timestamp,
+                        block_height: event.transaction_block_height,
+                        raw_event_type: event.event_type.to_string(),
+                        json_data: serde_json::to_value(&event).unwrap(),
+                        standard_event_type: event_type.clone(),
+                        ..Default::default()
+                    };
 
-                // Handle nft activity event
-                if let Some(remappings) = self.field_remappings.get(&event.event_type) {
-                    let event_type = self.marketplace_event_type_mapping.get(&event_type_str);
-
-                    if let Some(event_type) = event_type.cloned() {
-                        let contract_address = self
-                            .get_marketplace_name()
-                            .map(|_| event.account_address.clone());
-
-                        let mut activity = NftMarketplaceActivity {
-                            marketplace: self.get_marketplace_name(),
-                            txn_id: txn_id.clone(),
-                            txn_version: event.transaction_version,
-                            index: event.event_index,
-                            contract_address,
-                            block_timestamp: txn_ts,
-                            block_height: event.transaction_block_height,
-                            raw_event_type: event.event_type.to_string(),
-                            json_data: serde_json::to_value(&event).unwrap(),
-                            standard_event_type: event_type.clone(),
-                            ..Default::default()
-                        };
-
-                        // Step 2: Build model structs from the values obtained by the JsonPaths
-                        remappings.iter().try_for_each(|(json_path, db_mappings)| {
-                            db_mappings.iter().try_for_each(|db_mapping| {
-                                // Extract value, continue on error instead of failing
-                                let extracted_value = match json_path.extract_from(&event.data) {
-                                    Ok(value) => value,
-                                    Err(e) => {
-                                        debug!(
-                                            "Failed to extract value for path {}: {}",
-                                            json_path.raw, e
-                                        );
-                                        return Ok::<(), anyhow::Error>(());
-                                    },
-                                };
-
-                                let value = extracted_value
-                                    .as_str()
-                                    .map(|s| s.to_string())
-                                    .or_else(|| extracted_value.as_u64().map(|n| n.to_string()))
-                                    .unwrap_or_default();
-
-                                if value.is_empty() {
+                    // Step 2: Build model structs from the values obtained by the JsonPaths
+                    remappings.iter().try_for_each(|(json_path, db_mappings)| {
+                        db_mappings.iter().try_for_each(|db_mapping| {
+                            // Extract value, continue on error instead of failing
+                            let extracted_value = match json_path.extract_from(&event.data) {
+                                Ok(value) => value,
+                                Err(e) => {
                                     debug!(
-                                        "Skipping empty value for path {} for column {}",
-                                        json_path.raw, db_mapping.column
+                                        "Failed to extract value for path {}: {}",
+                                        json_path.raw, e
                                     );
+                                    return Ok::<(), anyhow::Error>(());
+                                },
+                            };
+
+                            let value = extracted_value
+                                .as_str()
+                                .map(|s| s.to_string())
+                                .or_else(|| extracted_value.as_u64().map(|n| n.to_string()))
+                                .unwrap_or_default();
+
+                            if value.is_empty() {
+                                debug!(
+                                    "Skipping empty value for path {} for column {}",
+                                    json_path.raw, db_mapping.column
+                                );
+                                return Ok(());
+                            }
+
+                            match TableType::from_str(db_mapping.table.as_str()) {
+                                Some(TableType::Activities) => {
+                                    match MarketplaceField::from_str(db_mapping.column.as_str()) {
+                                        Ok(field) => {
+                                            activity.set_field(field, value);
+                                        },
+                                        Err(e) => {
+                                            warn!(
+                                                "Skipping invalid field {}: {}",
+                                                db_mapping.column, e
+                                            );
+                                        },
+                                    }
+                                },
+                                _ => {
+                                    warn!("Unknown table: {}", db_mapping.table);
                                     return Ok(());
-                                }
-
-                                match TableType::from_str(db_mapping.table.as_str()) {
-                                    Some(TableType::Activities) => {
-                                        match MarketplaceField::from_str(db_mapping.column.as_str())
-                                        {
-                                            Ok(field) => {
-                                                activity.set_field(field, value);
-                                            },
-                                            Err(e) => {
-                                                warn!(
-                                                    "Skipping invalid field {}: {}",
-                                                    db_mapping.column, e
-                                                );
-                                            },
-                                        }
-                                    },
-                                    _ => {
-                                        warn!("Unknown table: {}", db_mapping.table);
-                                        return Ok(());
-                                    },
-                                }
-
-                                Ok(())
-                            })
-                        })?;
-
-                        // After processing all field remappings, generate necessary id fields if needed for PK
-                        if activity
-                            .get_field(MarketplaceField::CollectionAddr)
-                            .is_none()
-                        {
-                            let collection_addr = generate_collection_addr(
-                                activity.creator_address.clone(),
-                                activity.collection_name.clone(),
-                            );
-
-                            if let Some(collection_addr) = collection_addr {
-                                activity
-                                    .set_field(MarketplaceField::CollectionAddr, collection_addr);
+                                },
                             }
+
+                            Ok(())
+                        })
+                    })?;
+
+                    // After processing all field remappings, generate necessary id fields if needed for PK
+                    if activity
+                        .get_field(MarketplaceField::CollectionAddr)
+                        .is_none()
+                    {
+                        let collection_addr = generate_collection_addr(
+                            activity.creator_address.clone(),
+                            activity.collection_name.clone(),
+                        );
+
+                        if let Some(collection_addr) = collection_addr {
+                            activity.set_field(MarketplaceField::CollectionAddr, collection_addr);
                         }
-
-                        if activity.get_field(MarketplaceField::TokenAddr).is_none() {
-                            let token_addr = generate_token_addr(
-                                activity.creator_address.clone(),
-                                activity.collection_name.clone(),
-                                activity.token_name.clone(),
-                            );
-
-                            if let Some(token_addr) = token_addr {
-                                activity.set_field(MarketplaceField::TokenAddr, token_addr);
-                            }
-                        }
-
-                        // Handle collection_offer_id separately since it's specific to collection offers
-                        let is_collection_bid = activity
-                            .get_bid_type()
-                            .map_or(false, |bid_type| bid_type.as_str() == "collection");
-                        let is_offer_id_exists = activity
-                            .get_field(MarketplaceField::CollectionOfferId)
-                            .is_some();
-                        if is_collection_bid && !is_offer_id_exists {
-                            activity.offer_id = generate_collection_offer_id(
-                                activity.creator_address.clone(),
-                                activity.buyer.clone(),
-                            );
-                        }
-
-                        activities.push(activity);
                     }
+
+                    if activity.get_field(MarketplaceField::TokenAddr).is_none() {
+                        let token_addr = generate_token_addr(
+                            activity.creator_address.clone(),
+                            activity.collection_name.clone(),
+                            activity.token_name.clone(),
+                        );
+
+                        if let Some(token_addr) = token_addr {
+                            activity.set_field(MarketplaceField::TokenAddr, token_addr);
+                        }
+                    }
+
+                    // Handle collection_offer_id separately since it's specific to collection offers
+                    let is_collection_bid = activity
+                        .get_bid_type()
+                        .map_or(false, |bid_type| bid_type.as_str() == "collection");
+                    let is_offer_id_exists = activity
+                        .get_field(MarketplaceField::CollectionOfferId)
+                        .is_some();
+                    if is_collection_bid && !is_offer_id_exists {
+                        activity.offer_id = generate_collection_offer_id(
+                            activity.creator_address.clone(),
+                            activity.buyer.clone(),
+                        );
+                    }
+
+                    activities.push(activity);
                 }
             }
         }
 
         Ok(activities)
-    }
-
-    pub fn get_marketplace_name(&self) -> Option<String> {
-        if self.marketplace_name.as_str().contains("token_activities") {
-            None
-        } else {
-            Some(self.marketplace_name.clone())
-        }
-    }
-
-    fn get_events(&self, transaction: Arc<Transaction>) -> Result<Vec<EventModel>> {
-        let txn_version = transaction.version as i64;
-        let block_height = transaction.block_height as i64;
-        let txn_data = match transaction.txn_data.as_ref() {
-            Some(data) => data,
-            None => {
-                debug!("No transaction data found for version {}", txn_version);
-                return Ok(vec![]);
-            },
-        };
-        let txn_ts =
-            parse_timestamp(transaction.timestamp.as_ref().unwrap(), txn_version).naive_utc();
-        let default = vec![];
-        let raw_events = match txn_data {
-            TxnData::User(tx_inner) => tx_inner.events.as_slice(),
-            _ => &default,
-        };
-        EventModel::from_events(raw_events, txn_version, block_height, txn_ts)
     }
 }
 

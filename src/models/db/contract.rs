@@ -8,8 +8,7 @@ use crate::{
         },
     },
     schema::contracts,
-    steps::token::token_utils::TableMetadataForToken,
-    utils::create_id_for_contract,
+    utils::{create_id_for_contract, token_utils::TableMetadataForToken},
 };
 use ahash::AHashMap;
 use anyhow::Result;

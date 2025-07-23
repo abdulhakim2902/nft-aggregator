@@ -3,91 +3,51 @@ use crate::{
         db::{collection::Collection, commission::Commission, contract::Contract, nft::Nft},
         marketplace::NftMarketplaceActivity,
         resources::{FromWriteResource, V2TokenResource},
+        EventModel,
     },
-    steps::token::token_utils::{TableMetadataForToken, TokenEvent},
-    utils::object_utils::{ObjectAggregatedData, ObjectWithMetadata},
+    utils::{
+        object_utils::{ObjectAggregatedData, ObjectWithMetadata},
+        token_utils::{TableMetadataForToken, TokenEvent},
+    },
 };
 use ahash::AHashMap;
 use aptos_indexer_processor_sdk::{
-    aptos_indexer_transaction_stream::utils::time::parse_timestamp,
-    aptos_protos::transaction::v1::{transaction::TxnData, write_set_change::Change, Transaction},
+    aptos_protos::transaction::v1::{write_set_change::Change, TransactionInfo},
     utils::convert::standardize_address,
 };
-use tracing::warn;
+use std::mem;
 use uuid::Uuid;
 
-// TODO:
-// - Royalty
-pub fn parse_token(
-    transactions: &[Transaction],
-) -> (
-    Vec<NftMarketplaceActivity>,
-    Vec<Contract>,
-    Vec<Collection>,
-    Vec<Nft>,
-    Vec<Commission>,
-) {
-    let table_handler_to_owner =
-        TableMetadataForToken::get_table_handle_to_owner_from_transactions(transactions);
+pub struct TokenRemapper {
+    token_activities: Vec<NftMarketplaceActivity>,
+    token_metadata_helper: AHashMap<String, ObjectAggregatedData>,
+    current_collections: AHashMap<Option<Uuid>, Collection>,
+    current_nfts: AHashMap<Option<Uuid>, Nft>,
+    current_contracts: AHashMap<Option<Uuid>, Contract>,
+    current_commissions: AHashMap<Option<Uuid>, Commission>,
+    deposit_event_owner: AHashMap<String, String>,
+    table_metadata_handler: AHashMap<String, TableMetadataForToken>,
+}
 
-    let mut token_metadata_helper: AHashMap<String, ObjectAggregatedData> = AHashMap::new();
-
-    let mut activities: Vec<NftMarketplaceActivity> = Vec::new();
-
-    let mut current_collections: AHashMap<Option<Uuid>, Collection> = AHashMap::new();
-    let mut current_nfts: AHashMap<Option<Uuid>, Nft> = AHashMap::new();
-    let mut current_contracts: AHashMap<Option<Uuid>, Contract> = AHashMap::new();
-    let mut current_commissions: AHashMap<Option<Uuid>, Commission> = AHashMap::new();
-
-    for txn in transactions {
-        let txn_data = match txn.txn_data.as_ref() {
-            Some(data) => data,
-            None => {
-                warn!(
-                    transaction_version = txn.version,
-                    "Transaction data doesn't exist"
-                );
-                continue;
-            },
-        };
-
-        let txn_version = txn.version as i64;
-        let txn_timestamp =
-            parse_timestamp(txn.timestamp.as_ref().unwrap(), txn_version).naive_utc();
-        let transaction_info = match txn.info.as_ref() {
-            Some(info) => info,
-            None => {
-                warn!(
-                    transaction_version = txn.version,
-                    "Transaction info doesn't exist"
-                );
-                continue;
-            },
-        };
-
-        let user_txn = match txn_data {
-            TxnData::User(inner) => inner,
-            _ => {
-                continue;
-            },
-        };
-
-        let user_req = user_txn.request.as_ref();
-        if user_req.is_none() {
-            continue;
+impl TokenRemapper {
+    pub fn new(table_handler: AHashMap<String, TableMetadataForToken>) -> Self {
+        Self {
+            token_activities: Vec::new(),
+            token_metadata_helper: AHashMap::new(),
+            current_collections: AHashMap::new(),
+            current_nfts: AHashMap::new(),
+            current_contracts: AHashMap::new(),
+            current_commissions: AHashMap::new(),
+            deposit_event_owner: AHashMap::new(),
+            table_metadata_handler: table_handler,
         }
+    }
 
-        let txn_id = format!("0x{}", hex::encode(transaction_info.hash.clone()));
-
-        let user_req = user_req.unwrap();
-        let sender = &user_req.sender;
-
-        let mut deposit_event_owner: AHashMap<String, String> = AHashMap::new();
-
-        for wsc in transaction_info.changes.iter() {
+    pub fn add_metadata(&mut self, txn_info: &TransactionInfo) {
+        for wsc in txn_info.changes.iter() {
             if let Change::WriteResource(wr) = wsc.change.as_ref().unwrap() {
                 if let Some(object) = ObjectWithMetadata::from_write_resource(wr).unwrap() {
-                    token_metadata_helper.insert(
+                    self.token_metadata_helper.insert(
                         standardize_address(&wr.address),
                         ObjectAggregatedData {
                             object,
@@ -98,10 +58,10 @@ pub fn parse_token(
             }
         }
 
-        for wsc in transaction_info.changes.iter() {
+        for wsc in txn_info.changes.iter() {
             if let Change::WriteResource(wr) = wsc.change.as_ref().unwrap() {
                 let address = standardize_address(&wr.address.to_string());
-                if let Some(aggregated_data) = token_metadata_helper.get_mut(&address) {
+                if let Some(aggregated_data) = self.token_metadata_helper.get_mut(&address) {
                     let token_resource = V2TokenResource::from_write_resource(wr).unwrap();
                     if let Some(token_resource) = token_resource {
                         match token_resource {
@@ -132,130 +92,150 @@ pub fn parse_token(
                 }
             }
         }
+    }
 
-        for (index, event) in user_txn.events.iter().enumerate() {
+    pub fn add_activities(
+        &mut self,
+        events: &Vec<EventModel>,
+        sender: Option<&String>,
+        txn_id: &str,
+        txn_version: i64,
+    ) {
+        let mut deposit_event_owner: AHashMap<String, String> = AHashMap::new();
+
+        for (index, event) in events.iter().enumerate() {
             let nft_v1_activity = NftMarketplaceActivity::get_nft_v1_activity_from_token_event(
                 event,
-                &txn_id,
+                txn_id,
                 txn_version,
-                txn_timestamp,
                 index as i64,
-                txn.block_height as i64,
             )
             .unwrap();
 
             if let Some(activity) = nft_v1_activity {
-                activities.push(activity);
+                self.token_activities.push(activity);
             }
 
             let nft_v2_activity = NftMarketplaceActivity::get_nft_v2_activity_from_token_event(
                 event,
                 &txn_id,
                 txn_version,
-                txn_timestamp,
                 index as i64,
-                txn.block_height as i64,
-                &token_metadata_helper,
-                &sender,
+                &self.token_metadata_helper,
+                sender,
             )
             .unwrap();
 
             if let Some(activity) = nft_v2_activity {
-                activities.push(activity);
+                self.token_activities.push(activity);
             }
 
-            let token_event =
-                TokenEvent::from_event(event.type_str.as_str(), event.data.as_str(), txn_version);
+            let token_event = TokenEvent::from_event(
+                event.type_str.as_ref(),
+                &event.data.to_string(),
+                txn_version,
+            );
 
             if let Some(token_event) = token_event.unwrap() {
-                let event_account_addr =
-                    standardize_address(&event.key.as_ref().unwrap().account_address);
                 match token_event {
                     TokenEvent::DepositTokenEvent(inner) => {
-                        deposit_event_owner
-                            .insert(inner.id.token_data_id.to_addr(), event_account_addr.clone());
+                        deposit_event_owner.insert(
+                            inner.id.token_data_id.to_addr(),
+                            standardize_address(&event.account_address),
+                        );
                     },
                     TokenEvent::TokenDeposit(inner) => {
-                        deposit_event_owner
-                            .insert(inner.id.token_data_id.to_addr(), event_account_addr.clone());
+                        deposit_event_owner.insert(
+                            inner.id.token_data_id.to_addr(),
+                            standardize_address(&event.account_address),
+                        );
                     },
                     _ => {},
                 }
             }
         }
 
-        for wsc in transaction_info.changes.iter() {
+        self.deposit_event_owner = deposit_event_owner;
+    }
+
+    pub fn add_current_data(&mut self, txn_info: &TransactionInfo, txn_version: i64) {
+        for wsc in txn_info.changes.iter() {
             match wsc.change.as_ref().unwrap() {
                 Change::WriteTableItem(table_item) => {
                     let contract_result = Contract::get_from_write_table_item(
                         table_item,
                         txn_version,
-                        &table_handler_to_owner,
+                        &self.table_metadata_handler,
                     )
                     .unwrap();
 
                     if let Some(contract) = contract_result {
-                        current_contracts.insert(contract.id.clone(), contract);
+                        self.current_contracts.insert(contract.id.clone(), contract);
                     }
 
                     let collection_result = Collection::get_from_write_table_item(
                         table_item,
                         txn_version,
-                        &table_handler_to_owner,
+                        &self.table_metadata_handler,
                     )
                     .unwrap();
 
                     if let Some(collection) = collection_result {
-                        current_collections.insert(collection.id.clone(), collection);
+                        self.current_collections
+                            .insert(collection.id.clone(), collection);
                     }
 
                     let nft_result = Nft::get_from_write_table_item(
                         table_item,
                         txn_version,
-                        &table_handler_to_owner,
-                        &deposit_event_owner,
+                        &self.table_metadata_handler,
+                        &self.deposit_event_owner,
                     )
                     .unwrap();
 
                     if let Some(nft) = nft_result {
-                        current_nfts.insert(nft.id.clone(), nft);
+                        self.current_nfts.insert(nft.id.clone(), nft);
                     }
 
                     let commission_result =
                         Commission::get_from_write_table_item(table_item, txn_version).unwrap();
 
                     if let Some(commission) = commission_result {
-                        current_commissions.insert(commission.id.clone(), commission);
+                        self.current_commissions
+                            .insert(commission.id.clone(), commission);
                     }
                 },
                 Change::WriteResource(resource) => {
                     let contract_result = Contract::get_from_write_resource(resource).unwrap();
 
                     if let Some(contract) = contract_result {
-                        current_contracts.insert(contract.id.clone(), contract);
+                        self.current_contracts.insert(contract.id.clone(), contract);
                     }
 
                     let colletion_result =
-                        Collection::get_from_write_resource(resource, &token_metadata_helper)
+                        Collection::get_from_write_resource(resource, &self.token_metadata_helper)
                             .unwrap();
 
                     if let Some(collection) = colletion_result {
-                        current_collections.insert(collection.id.clone(), collection);
+                        self.current_collections
+                            .insert(collection.id.clone(), collection);
                     }
 
                     let nft_result =
-                        Nft::get_from_write_resource(resource, &token_metadata_helper).unwrap();
+                        Nft::get_from_write_resource(resource, &self.token_metadata_helper)
+                            .unwrap();
 
                     if let Some(nft) = nft_result {
-                        current_nfts.insert(nft.id.clone(), nft.clone());
+                        self.current_nfts.insert(nft.id.clone(), nft.clone());
                     }
 
                     let commission_result =
-                        Commission::get_from_write_resource(resource, &token_metadata_helper)
+                        Commission::get_from_write_resource(resource, &self.token_metadata_helper)
                             .unwrap();
 
                     if let Some(commission) = commission_result {
-                        current_commissions.insert(commission.id.clone(), commission.clone());
+                        self.current_commissions
+                            .insert(commission.id.clone(), commission.clone());
                     }
                 },
                 _ => {},
@@ -263,14 +243,21 @@ pub fn parse_token(
         }
     }
 
-    let contracts = current_contracts.into_values().collect::<Vec<Contract>>();
-    let collections = current_collections
-        .into_values()
-        .collect::<Vec<Collection>>();
-    let nfts = current_nfts.into_values().collect::<Vec<Nft>>();
-    let commissions = current_commissions
-        .into_values()
-        .collect::<Vec<Commission>>();
-
-    (activities, contracts, collections, nfts, commissions)
+    pub fn drain(
+        &mut self,
+    ) -> (
+        Vec<NftMarketplaceActivity>,
+        Vec<Contract>,
+        Vec<Collection>,
+        Vec<Nft>,
+        Vec<Commission>,
+    ) {
+        (
+            mem::take(&mut self.token_activities),
+            self.current_contracts.drain().map(|(_, v)| v).collect(),
+            self.current_collections.drain().map(|(_, v)| v).collect(),
+            self.current_nfts.drain().map(|(_, v)| v).collect(),
+            self.current_commissions.drain().map(|(_, v)| v).collect(),
+        )
+    }
 }

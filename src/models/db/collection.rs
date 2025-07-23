@@ -5,8 +5,10 @@ use crate::{
         FromWriteResource,
     },
     schema::collections,
-    steps::token::token_utils::TableMetadataForToken,
-    utils::{create_id_for_collection, create_id_for_contract, object_utils::ObjectAggregatedData},
+    utils::{
+        create_id_for_collection, create_id_for_contract, object_utils::ObjectAggregatedData,
+        token_utils::TableMetadataForToken,
+    },
 };
 use ahash::AHashMap;
 use anyhow::Result;

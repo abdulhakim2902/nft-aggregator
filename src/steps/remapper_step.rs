@@ -4,18 +4,22 @@ use crate::{
     models::{
         db::{collection::Collection, commission::Commission, contract::Contract, nft::Nft},
         marketplace::NftMarketplaceActivity,
+        EventModel,
     },
-    steps::{remappers::event_remapper::EventRemapper, token::token_processor_helper::parse_token},
+    steps::remappers::{event_remapper::EventRemapper, token_remapper::TokenRemapper},
+    utils::token_utils::TableMetadataForToken,
 };
 use anyhow::Result;
 use aptos_indexer_processor_sdk::{
-    aptos_protos::transaction::v1::Transaction,
+    aptos_indexer_transaction_stream::utils::time::parse_timestamp,
+    aptos_protos::transaction::v1::{transaction::TxnData, Transaction},
     traits::{AsyncRunType, AsyncStep, NamedStep, Processable},
     types::transaction_context::TransactionContext,
     utils::errors::ProcessorError,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::sync::Arc;
+use tracing::debug;
 
 pub struct Remapper {
     event_remapper: Arc<EventRemapper>,
@@ -72,43 +76,46 @@ impl Processable for ProcessStep {
         &mut self,
         transactions: TransactionContext<Vec<Transaction>>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
-        // Handle NFT Metadata and activity
-        let (token_activities, contracts, collections, nfts, commissions) =
-            parse_token(&transactions.data);
-
-        // Handle NFT Marketplace Activity
-        let results = self
-            .remappers
-            .par_iter()
-            .map(|this| {
-                let result = transactions
-                    .data
-                    .par_iter()
-                    .map(|transaction| {
-                        let event_remapper = this.event_remapper.clone();
-                        let activities = event_remapper.remap_events(transaction.clone())?;
-
-                        Ok(activities)
-                    })
-                    .collect::<anyhow::Result<Vec<_>>>();
-
-                result
-            })
-            .collect::<anyhow::Result<Vec<Vec<_>>>>()
-            .map_err(|e| ProcessorError::ProcessError {
-                message: format!("{e:#}"),
-            })?;
+        let table_handler_to_owner =
+            TableMetadataForToken::get_table_handle_to_owner_from_transactions(&transactions.data);
 
         let mut marketplace_activities = Vec::new();
-        for items in results.iter() {
-            let mut all_activities = Vec::new();
+        let mut token_remapper = TokenRemapper::new(table_handler_to_owner);
 
-            for activities in items.clone() {
-                all_activities.extend(activities);
+        for txn in transactions.data {
+            if let Some(txn_info) = txn.info.as_ref() {
+                let txn_id = format!("0x{}", hex::encode(txn_info.hash.as_slice()));
+                let txn_version = txn.version as i64;
+
+                let (sender, events) = self.get_events(Arc::new(txn.clone())).map_err(|e| {
+                    ProcessorError::ProcessError {
+                        message: format!("{e:#}"),
+                    }
+                })?;
+
+                token_remapper.add_metadata(txn_info);
+                token_remapper.add_activities(&events, sender.as_ref(), &txn_id, txn_version);
+                token_remapper.add_current_data(txn_info, txn_version);
+
+                let result = self
+                    .remappers
+                    .par_iter()
+                    .map(|this| {
+                        let event_remapper = this.event_remapper.clone();
+                        let activities = event_remapper.remap_events(&txn_id, &events);
+
+                        return activities;
+                    })
+                    .collect::<anyhow::Result<Vec<Vec<NftMarketplaceActivity>>>>()
+                    .map_err(|e| ProcessorError::ProcessError {
+                        message: format!("{e:#}"),
+                    })?;
+
+                marketplace_activities.extend(result);
             }
-
-            marketplace_activities.push(all_activities);
         }
+
+        let (token_activities, contracts, collections, nfts, commissions) = token_remapper.drain();
 
         marketplace_activities.push(token_activities);
 
@@ -124,6 +131,39 @@ impl Processable for ProcessStep {
             data: output,
             metadata: transactions.metadata,
         }))
+    }
+}
+
+impl ProcessStep {
+    fn get_events(
+        &self,
+        transaction: Arc<Transaction>,
+    ) -> Result<(Option<String>, Vec<EventModel>)> {
+        let txn_version = transaction.version as i64;
+        let block_height = transaction.block_height as i64;
+        let txn_data = match transaction.txn_data.as_ref() {
+            Some(data) => data,
+            None => {
+                debug!("No transaction data found for version {}", txn_version);
+                return Ok((None, vec![]));
+            },
+        };
+        let txn_ts =
+            parse_timestamp(transaction.timestamp.as_ref().unwrap(), txn_version).naive_utc();
+        let default = vec![];
+        let raw_events = match txn_data {
+            TxnData::User(tx_inner) => tx_inner.events.as_slice(),
+            _ => &default,
+        };
+
+        let sender = match txn_data {
+            TxnData::User(tx_inner) => tx_inner.request.as_ref().map(|e| e.sender.to_string()),
+            _ => None,
+        };
+
+        let events = EventModel::from_events(raw_events, txn_version, block_height, txn_ts)?;
+
+        Ok((sender, events))
     }
 }
 

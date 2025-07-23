@@ -18,7 +18,7 @@ pub struct EventModel {
     pub transaction_version: i64,
     pub transaction_block_height: i64,
     pub event_type: EventType,
-    pub type_: String,
+    pub type_str: String,
     pub data: serde_json::Value,
     pub event_index: i64,
     pub block_timestamp: NaiveDateTime,
@@ -55,7 +55,7 @@ impl EventModel {
             transaction_version,
             transaction_block_height,
             event_type,
-            type_: t.to_string(),
+            type_str: event.type_str.clone(),
             // We continue to panic here because we want to fail fast in this case
             // since the event data should _always_ be valid JSON.
             data: serde_json::from_str(event.data.as_str())

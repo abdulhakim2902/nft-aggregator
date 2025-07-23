@@ -6,6 +6,7 @@ use crate::models::marketplace::{
 
 pub mod event_remapper;
 pub mod resource_remapper;
+pub mod token_remapper;
 
 #[derive(Debug, PartialEq, Eq)]
 enum TableType {
