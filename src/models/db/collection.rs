@@ -110,9 +110,9 @@ impl Collection {
                 if let Some(concurrent_supply) = object.concurrent_supply.as_ref() {
                     collection.supply = concurrent_supply.current_supply.value.to_i64()
                 }
-
-                return Ok(Some(collection));
             }
+
+            return Ok(Some(collection));
         }
 
         Ok(None)

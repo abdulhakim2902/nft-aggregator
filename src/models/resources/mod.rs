@@ -183,7 +183,8 @@ impl V2TokenResource {
             TYPE_UNLIMITED_SUPPLY => Some(Self::UnlimitedSupply(write_resource.try_into()?)),
             TYPE_TOKEN_IDENTIFIERS => Some(Self::TokenIdentifiers(write_resource.try_into()?)),
             TYPE_PROPERTY_MAP => Some(Self::PropertyMapModel(write_resource.try_into()?)),
-            TYPE_ROYALTY => Some(Self::PropertyMapModel(write_resource.try_into()?)),
+            TYPE_ROYALTY => Some(Self::Royalty(write_resource.try_into()?)),
+            TYPE_TOKEN_V2 => Some(Self::Token(write_resource.try_into()?)),
             _ => None,
         };
 
