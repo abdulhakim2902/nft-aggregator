@@ -19,6 +19,7 @@ pub const QUERY_DEFAULT_RETRY_DELAY_MS: u64 = 500;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct IndexerProcessorConfig {
+    pub tapp_url: String,
     pub transaction_stream_config: TransactionStreamConfig,
     pub db_config: DbConfig,
     pub processor_mode: ProcessorMode,

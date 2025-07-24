@@ -1,6 +1,17 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    _sqlx_migrations (version) {
+        version -> Int8,
+        description -> Text,
+        installed_on -> Timestamptz,
+        success -> Bool,
+        checksum -> Bytea,
+        execution_time -> Int8,
+    }
+}
+
+diesel::table! {
     actions (tx_index, tx_id) {
         #[max_length = 30]
         tx_type -> Varchar,
@@ -150,6 +161,13 @@ diesel::table! {
 }
 
 diesel::table! {
+    prices (created_at) {
+        created_at -> Timestamptz,
+        price -> Numeric,
+    }
+}
+
+diesel::table! {
     processor_status (processor) {
         #[max_length = 100]
         processor -> Varchar,
@@ -160,6 +178,7 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
+    _sqlx_migrations,
     actions,
     backfill_processor_status,
     bids,
@@ -167,5 +186,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     commissions,
     listings,
     nfts,
+    prices,
     processor_status,
 );

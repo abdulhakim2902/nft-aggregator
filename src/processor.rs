@@ -8,6 +8,7 @@ use crate::{
         reduction_step::NFTReductionStep,
         remapper_step::ProcessStep,
     },
+    workers::price_worker::PriceWorker,
     MIGRATIONS,
 };
 use anyhow::Result;
@@ -84,6 +85,10 @@ impl ProcessorTrait for Processor {
             &PostgresChainIdChecker::new(self.db_pool.clone()),
         )
         .await?;
+
+        let price_worker = PriceWorker::new(&self.config.tapp_url, self.db_pool.clone());
+
+        tokio::spawn(async move { price_worker.start().await });
 
         let channel_size = 100;
 

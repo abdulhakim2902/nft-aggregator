@@ -63,7 +63,6 @@ impl TryFrom<&WriteResource> for TokenIdentifiers {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TokenWriteSet {
     TokenDataId(TokenDataIdType),
-    TokenAddr(TokenDataIdType),
     TokenId(TokenIdType),
     TokenData(TokenDataType),
     Token(TokenType),
@@ -79,7 +78,7 @@ impl TokenWriteSet {
     ) -> Result<Option<TokenWriteSet>> {
         match data_type {
             "0x3::token::TokenDataId" => {
-                serde_json::from_str(data).map(|inner| Some(TokenWriteSet::TokenAddr(inner)))
+                serde_json::from_str(data).map(|inner| Some(TokenWriteSet::TokenDataId(inner)))
             },
             "0x3::token::TokenId" => {
                 serde_json::from_str(data).map(|inner| Some(TokenWriteSet::TokenId(inner)))

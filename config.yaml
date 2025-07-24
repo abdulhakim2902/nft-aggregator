@@ -1,5 +1,6 @@
 health_check_port: 8085
 server_config:
+  tapp_url: "https://display-engine-mirror.tapp-dex.devucc.name/api/v1"
   processor_mode:
     type: default
     initial_starting_version: 1997824036

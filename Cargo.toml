@@ -64,6 +64,7 @@ num_cpus = "1.16.0"
 postgres-native-tls = "0.5.0"
 
 rayon = "1.10.0"
+reqwest = { version = "0.12.22", features = ["json"] }
 serde = { version = "1.0.193", features = ["derive", "rc"] }
 serde_json = { version = "1.0.81", features = ["preserve_order"] }
 serde_yaml = "0.9.34"

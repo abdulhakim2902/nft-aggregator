@@ -4,3 +4,4 @@ pub mod collection;
 pub mod commission;
 pub mod listing;
 pub mod nft;
+pub mod price;

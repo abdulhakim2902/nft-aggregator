@@ -39,42 +39,42 @@ impl Collection {
         txn_version: i64,
         table_handle_to_owner: &AHashMap<String, TableMetadataForToken>,
     ) -> Result<Option<Self>> {
-        let table_item_data = table_item.data.as_ref().unwrap();
+        if let Some(table_item_data) = table_item.data.as_ref() {
+            let maybe_collection_data = match TokenWriteSet::from_table_item_type(
+                table_item_data.value_type.as_str(),
+                &table_item_data.value,
+                txn_version,
+            )? {
+                Some(TokenWriteSet::CollectionData(inner)) => Some(inner),
+                _ => None,
+            };
 
-        let maybe_collection_data = match TokenWriteSet::from_table_item_type(
-            table_item_data.value_type.as_str(),
-            &table_item_data.value,
-            txn_version,
-        )? {
-            Some(TokenWriteSet::CollectionData(inner)) => Some(inner),
-            _ => None,
-        };
+            if let Some(collection_data) = maybe_collection_data {
+                let table_handle = table_item.handle.to_string();
+                let maybe_creator_address = table_handle_to_owner
+                    .get(&standardize_address(&table_handle))
+                    .map(|metadata| metadata.get_owner_address());
 
-        if let Some(collection_data) = maybe_collection_data {
-            let table_handle = table_item.handle.to_string();
-            let maybe_creator_address = table_handle_to_owner
-                .get(&standardize_address(&table_handle))
-                .map(|metadata| metadata.get_owner_address());
+                if let Some(creator_address) = maybe_creator_address {
+                    let collection_id_struct =
+                        CollectionDataIdType::new(creator_address, collection_data.name.clone());
 
-            if let Some(creator_address) = maybe_creator_address {
-                let collection_id_struct =
-                    CollectionDataIdType::new(creator_address, collection_data.name.clone());
+                    let collection_addr = collection_id_struct.to_addr();
 
-                let collection_addr = collection_id_struct.to_addr();
+                    // TODO: collection slug
 
-                // TODO: collection slug
+                    let collection = Collection {
+                        id: collection_addr.clone(),
+                        slug: Some(collection_addr),
+                        title: Some(collection_data.name.clone()),
+                        description: Some(collection_data.description.clone()),
+                        supply: collection_data.supply.to_i64(),
+                        cover_url: Some(collection_data.uri.clone()),
+                        floor: None,
+                    };
 
-                let collection = Collection {
-                    id: collection_addr.clone(),
-                    slug: Some(collection_addr),
-                    title: Some(collection_data.name.clone()),
-                    description: Some(collection_data.description.clone()),
-                    supply: collection_data.supply.to_i64(),
-                    cover_url: Some(collection_data.uri.clone()),
-                    floor: None,
-                };
-
-                return Ok(Some(collection));
+                    return Ok(Some(collection));
+                }
             }
         }
 

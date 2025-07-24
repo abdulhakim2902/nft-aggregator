@@ -12,5 +12,6 @@ pub mod models;
 pub mod postgres;
 pub mod processor;
 pub mod utils;
+pub mod workers;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./src/postgres/migrations");

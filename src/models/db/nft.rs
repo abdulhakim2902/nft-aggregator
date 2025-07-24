@@ -102,7 +102,7 @@ impl Nft {
                     &table_item_data.key,
                     txn_version,
                 )? {
-                    Some(TokenWriteSet::TokenAddr(inner)) => Some(inner),
+                    Some(TokenWriteSet::TokenDataId(inner)) => Some(inner),
                     _ => None,
                 };
 
