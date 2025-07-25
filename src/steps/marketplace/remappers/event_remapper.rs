@@ -6,7 +6,7 @@ use crate::{
         marketplace::{BidModel, MarketplaceField, MarketplaceModel, NftMarketplaceActivity},
         EventModel,
     },
-    steps::{remappers::TableType, HashableJsonPath},
+    steps::marketplace::{remappers::TableType, HashableJsonPath},
 };
 use anyhow::Result;
 use aptos_indexer_processor_sdk::{

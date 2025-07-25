@@ -53,26 +53,26 @@ impl PriceWorker {
         info!("Price worker is starting!");
 
         loop {
+            let now = Utc::now();
+            let rounded = Utc.with_ymd_and_hms(
+                now.year(),
+                now.month(),
+                now.day(),
+                now.hour(),
+                now.minute(),
+                0,
+            );
+
             let price_res = self.fetch_price().await.unwrap();
 
             if let Some(price) = price_res {
-                let now = Utc::now();
-                let rounded = Utc.with_ymd_and_hms(
-                    now.year(),
-                    now.month(),
-                    now.day(),
-                    now.hour(),
-                    now.minute(),
-                    0,
-                );
-
                 let pg_price = PostgrePrice {
                     price,
                     created_at: rounded.unwrap().naive_utc(),
                 };
 
                 let prices = vec![pg_price];
-                match execute_in_chunks(self.db_pool.clone(), insert_price, &prices, 1).await {
+                match execute_in_chunks(self.db_pool.clone(), insert_price, &prices, 200).await {
                     Ok(_) => (),
                     Err(e) => {
                         error!("{:#?}", e);

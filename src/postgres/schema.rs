@@ -96,7 +96,10 @@ diesel::table! {
         supply -> Nullable<Int8>,
         #[max_length = 128]
         title -> Nullable<Varchar>,
-        floor -> Nullable<Int8>,
+        twitter -> Nullable<Varchar>,
+        verified -> Nullable<Bool>,
+        website -> Nullable<Varchar>,
+        discord -> Nullable<Varchar>,
         description -> Nullable<Text>,
         #[max_length = 512]
         cover_url -> Nullable<Varchar>,
@@ -120,6 +123,8 @@ diesel::table! {
         block_time -> Timestamptz,
         #[max_length = 66]
         market_contract_id -> Varchar,
+        #[max_length = 66]
+        collection_id -> Nullable<Varchar>,
         #[max_length = 66]
         nft_id -> Varchar,
         listed -> Nullable<Bool>,

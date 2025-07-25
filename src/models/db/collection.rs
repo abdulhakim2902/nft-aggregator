@@ -30,7 +30,10 @@ pub struct Collection {
     pub title: Option<String>,
     pub description: Option<String>,
     pub cover_url: Option<String>,
-    pub floor: Option<i64>,
+    pub verified: Option<bool>,
+    pub website: Option<String>,
+    pub discord: Option<String>,
+    pub twitter: Option<String>,
 }
 
 impl Collection {
@@ -70,7 +73,7 @@ impl Collection {
                         description: Some(collection_data.description.clone()),
                         supply: collection_data.supply.to_i64(),
                         cover_url: Some(collection_data.uri.clone()),
-                        floor: None,
+                        ..Default::default()
                     };
 
                     return Ok(Some(collection));
@@ -93,9 +96,8 @@ impl Collection {
                 slug: Some(address.clone()),
                 title: Some(inner.name),
                 description: Some(inner.description),
-                supply: None,
                 cover_url: Some(inner.uri),
-                floor: None,
+                ..Default::default()
             };
 
             if let Some(object) = object_metadata.get(&address) {

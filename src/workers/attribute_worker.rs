@@ -100,8 +100,8 @@ impl AttributeWorker {
                         let attribute = Attribute {
                             collection_id: nft.collection_id.clone(),
                             nft_id: Some(nft.id.clone()),
-                            attr_type: Some(attribute.trait_type),
-                            value: Some(attribute.value),
+                            attr_type: Some(attribute.trait_type.to_lowercase()),
+                            value: Some(attribute.value.to_lowercase()),
                             score: None,
                             rarity: None,
                         };

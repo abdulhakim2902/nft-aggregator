@@ -1,20 +1,8 @@
 use crate::{
     config::marketplace_config::MarketplaceEventType,
-    models::{
-        db::{action::Action, bid::Bid, listing::Listing},
-        EventModel,
-    },
-    utils::{
-        object_utils::ObjectAggregatedData,
-        token_utils::{TokenEvent, V2TokenEvent},
-    },
+    models::db::{action::Action, bid::Bid, listing::Listing},
 };
-use ahash::AHashMap;
-use anyhow::Result;
-use aptos_indexer_processor_sdk::{
-    aptos_indexer_transaction_stream::utils::time::parse_timestamp_secs,
-    utils::convert::standardize_address,
-};
+use aptos_indexer_processor_sdk::aptos_indexer_transaction_stream::utils::time::parse_timestamp_secs;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
@@ -109,6 +97,7 @@ impl From<NftMarketplaceActivity> for Listing {
             tx_index: Some(value.get_tx_index()),
             listed: value.get_listing_status(),
             market_contract_id: value.contract_address,
+            collection_id: value.collection_addr,
             nft_id: value.token_addr,
             market_name: value.marketplace,
             seller: value.seller,
@@ -124,173 +113,6 @@ impl From<NftMarketplaceActivity> for Listing {
 impl NftMarketplaceActivity {
     pub fn get_tx_index(&self) -> i64 {
         self.txn_version * 100_000 + self.index
-    }
-
-    pub fn get_nft_v1_activity_from_token_event(
-        event: &EventModel,
-        txn_id: &str,
-        txn_version: i64,
-        event_index: i64,
-    ) -> Result<Option<NftMarketplaceActivity>> {
-        let event_type = event.type_str.clone();
-        let token_event = TokenEvent::from_event(&event_type, &event.data.to_string(), txn_version);
-        if let Some(token_event) = token_event? {
-            let token_activity = match &token_event {
-                TokenEvent::Mint(inner) => Some(NftMarketplaceActivity {
-                    txn_id: txn_id.to_string(),
-                    txn_version: event.transaction_version,
-                    index: event_index,
-                    block_timestamp: event.block_timestamp,
-                    block_height: event.transaction_block_height,
-                    standard_event_type: MarketplaceEventType::Mint,
-                    buyer: Some(inner.get_account()),
-                    collection_addr: Some(inner.id.get_collection_addr()),
-                    token_addr: Some(inner.id.to_addr()),
-                    ..Default::default()
-                }),
-                TokenEvent::MintTokenEvent(inner) => Some(NftMarketplaceActivity {
-                    txn_id: txn_id.to_string(),
-                    txn_version: event.transaction_version,
-                    index: event_index,
-                    block_timestamp: event.block_timestamp,
-                    block_height: event.transaction_block_height,
-                    standard_event_type: MarketplaceEventType::Mint,
-                    buyer: Some(standardize_address(&event.account_address)),
-                    collection_addr: Some(inner.id.get_collection_addr()),
-                    token_addr: Some(inner.id.to_addr()),
-                    ..Default::default()
-                }),
-                TokenEvent::Burn(inner) => Some(NftMarketplaceActivity {
-                    txn_id: txn_id.to_string(),
-                    txn_version: event.transaction_version,
-                    index: event_index,
-                    block_timestamp: event.block_timestamp,
-                    block_height: event.transaction_block_height,
-                    standard_event_type: MarketplaceEventType::Burn,
-                    seller: Some(inner.get_account()),
-                    collection_addr: Some(inner.id.token_data_id.get_collection_addr()),
-                    token_addr: Some(inner.id.token_data_id.to_addr()),
-                    ..Default::default()
-                }),
-                TokenEvent::BurnTokenEvent(inner) => Some(NftMarketplaceActivity {
-                    txn_id: txn_id.to_string(),
-                    txn_version: event.transaction_version,
-                    index: event_index,
-                    block_timestamp: event.block_timestamp,
-                    block_height: event.transaction_block_height,
-                    standard_event_type: MarketplaceEventType::Burn,
-                    seller: Some(standardize_address(&event.account_address)),
-                    collection_addr: Some(inner.id.token_data_id.get_collection_addr()),
-                    token_addr: Some(inner.id.token_data_id.to_addr()),
-                    ..Default::default()
-                }),
-                _ => None,
-            };
-
-            return Ok(token_activity);
-        }
-
-        Ok(None)
-    }
-
-    pub fn get_nft_v2_activity_from_token_event(
-        event: &EventModel,
-        txn_id: &str,
-        txn_version: i64,
-        event_index: i64,
-        object_metadata: &AHashMap<String, ObjectAggregatedData>,
-        sender: Option<&String>,
-    ) -> Result<Option<NftMarketplaceActivity>> {
-        let event_type = event.type_str.clone();
-        let token_event =
-            V2TokenEvent::from_event(&event_type, &event.data.to_string(), txn_version);
-        if let Some(token_event) = token_event? {
-            let token_addr = match &token_event {
-                V2TokenEvent::MintEvent(inner) => inner.get_token_address(),
-                V2TokenEvent::Mint(inner) => inner.get_token_address(),
-                V2TokenEvent::BurnEvent(inner) => inner.get_token_address(),
-                V2TokenEvent::Burn(inner) => inner.get_token_address(),
-                V2TokenEvent::TransferEvent(inner) => inner.get_object_address(),
-                _ => standardize_address(&event.account_address),
-            };
-
-            if let Some(object_data) = object_metadata.get(&token_addr) {
-                let token_activity = match token_event {
-                    V2TokenEvent::Mint(mint) => Some(NftMarketplaceActivity {
-                        txn_id: txn_id.to_string(),
-                        txn_version: event.transaction_version,
-                        block_height: event.transaction_block_height,
-                        block_timestamp: event.block_timestamp,
-                        index: event_index,
-                        standard_event_type: MarketplaceEventType::Mint,
-                        buyer: Some(object_data.object.object_core.get_owner_address()),
-                        collection_addr: Some(mint.get_collection_address()),
-                        token_addr: Some(mint.get_token_address()),
-                        ..Default::default()
-                    }),
-                    V2TokenEvent::MintEvent(mint) => Some(NftMarketplaceActivity {
-                        txn_id: txn_id.to_string(),
-                        index: event_index,
-                        txn_version: event.transaction_version,
-                        block_height: event.transaction_block_height,
-                        block_timestamp: event.block_timestamp,
-                        standard_event_type: MarketplaceEventType::Mint,
-                        buyer: Some(object_data.object.object_core.get_owner_address()),
-                        collection_addr: Some(standardize_address(&event.account_address)),
-                        token_addr: Some(mint.get_token_address()),
-                        ..Default::default()
-                    }),
-                    V2TokenEvent::Burn(burn) => Some(NftMarketplaceActivity {
-                        txn_id: txn_id.to_string(),
-                        index: event_index,
-                        txn_version: event.transaction_version,
-                        block_height: event.transaction_block_height,
-                        block_timestamp: event.block_timestamp,
-                        standard_event_type: MarketplaceEventType::Burn,
-                        seller: burn.get_previous_owner_address(),
-                        collection_addr: Some(burn.get_collection_address()),
-                        token_addr: Some(burn.get_token_address()),
-                        ..Default::default()
-                    }),
-                    V2TokenEvent::BurnEvent(burn) => Some(NftMarketplaceActivity {
-                        txn_id: txn_id.to_string(),
-                        index: event_index,
-                        txn_version: event.transaction_version,
-                        block_height: event.transaction_block_height,
-                        block_timestamp: event.block_timestamp,
-                        standard_event_type: MarketplaceEventType::Burn,
-                        seller: sender.map(|s| s.to_string()),
-                        collection_addr: Some(standardize_address(&event.account_address)),
-                        token_addr: Some(burn.get_token_address()),
-                        ..Default::default()
-                    }),
-                    V2TokenEvent::TransferEvent(transfer) => {
-                        if let Some(token) = &object_data.token {
-                            Some(NftMarketplaceActivity {
-                                txn_id: txn_id.to_string(),
-                                index: event_index,
-                                txn_version: event.transaction_version,
-                                block_height: event.transaction_block_height,
-                                block_timestamp: event.block_timestamp,
-                                standard_event_type: MarketplaceEventType::Transfer,
-                                seller: Some(transfer.get_from_address()),
-                                buyer: Some(transfer.get_to_address()),
-                                collection_addr: Some(token.get_collection_address()),
-                                token_addr: Some(transfer.get_object_address()),
-                                ..Default::default()
-                            })
-                        } else {
-                            None
-                        }
-                    },
-                    _ => None,
-                };
-
-                return Ok(token_activity);
-            }
-        }
-
-        Ok(None)
     }
 }
 

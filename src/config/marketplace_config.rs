@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::steps::HashableJsonPath;
+use crate::steps::marketplace::HashableJsonPath;
 use anyhow::Result;
 use aptos_indexer_processor_sdk::utils::convert::standardize_address;
 use diesel::{
@@ -33,9 +33,10 @@ pub struct DbColumn {
 }
 
 /// Represents a marketplace and its configuration
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct NFTMarketplaceConfig {
     pub name: String,
+    pub module_address: String,
     /// Maps event type strings to their corresponding MarketplaceEventType enum values.
     /// This mapping is used to standardize different marketplace event types across
     /// different NFT marketplaces into a standarzied event types for processing.

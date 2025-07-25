@@ -20,19 +20,20 @@ server_config:
     # we set db_pool_size to a lower number on cloud because we use a free plan
     db_pool_size: 25
   nft_marketplace_configs:
-    - name: "topaz"
+    - name: topaz
+      module_address: 0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events
       event_model_mapping:
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::ListEvent: list
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::DelistEvent: unlist
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::BuyEvent: buy
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::BidEvent: solo_bid
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::CancelBidEvent: unlist_bid
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::SellEvent: accept_bid
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::CollectionBidEvent: collection_bid  
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::FillCollectionBidEvent: accept_collection_bid
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::CancelCollectionBidEvent: cancel_collection_bid
+        ListEvent: list
+        DelistEvent: unlist
+        BuyEvent: buy
+        BidEvent: solo_bid
+        CancelBidEvent: unlist_bid
+        SellEvent: accept_bid
+        CollectionBidEvent: collection_bid  
+        FillCollectionBidEvent: accept_collection_bid
+        CancelCollectionBidEvent: cancel_collection_bid
       events:
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::ListEvent:
+        ListEvent:
           event_fields:
             "$.listing_id":
               - table: nft_marketplace_activities
@@ -56,7 +57,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: token_amount
 
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::DelistEvent:
+        DelistEvent:
           event_fields:
             "$.listing_id":
               - table: nft_marketplace_activities
@@ -80,7 +81,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: token_amount
         
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::BuyEvent:
+        BuyEvent:
           event_fields:
             "$.listing_id":
               - table: nft_marketplace_activities
@@ -107,7 +108,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: token_amount
         
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::BidEvent:
+        BidEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities
@@ -134,7 +135,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: expiration_time
 
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::CancelBidEvent:
+        CancelBidEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities
@@ -161,7 +162,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: expiration_time
 
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::SellEvent:
+        SellEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities
@@ -191,7 +192,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: expiration_time
         
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::CollectionBidEvent:
+        CollectionBidEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities
@@ -218,7 +219,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: expiration_time
 
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::FillCollectionBidEvent:
+        FillCollectionBidEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities
@@ -248,7 +249,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: expiration_time
 
-        0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events::CancelCollectionBidEvent:
+        CancelCollectionBidEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities

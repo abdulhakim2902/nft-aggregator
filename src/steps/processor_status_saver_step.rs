@@ -1,8 +1,5 @@
 use crate::{
-    config::{
-        processor_mode::{BackfillConfig, BootStrapConfig, ProcessorMode, TestingConfig},
-        IndexerProcessorConfig,
-    },
+    config::processor_mode::{BackfillConfig, BootStrapConfig, ProcessorMode, TestingConfig},
     postgres::backfill_processor_status::{
         BackfillProcessorStatus, BackfillProcessorStatusQuery, BackfillStatus,
     },
@@ -25,13 +22,18 @@ use diesel::{query_dsl::methods::FilterDsl, upsert::excluded, ExpressionMethods}
 
 /// A trait implementation of ProcessorStatusSaver for Postgres.
 pub struct PostgresProcessorStatusSaver {
-    pub config: IndexerProcessorConfig,
+    pub name: String,
+    pub processor_mode: ProcessorMode,
     pub db_pool: ArcDbPool,
 }
 
 impl PostgresProcessorStatusSaver {
-    pub fn new(config: IndexerProcessorConfig, db_pool: ArcDbPool) -> Self {
-        Self { config, db_pool }
+    pub fn new(name: String, processor_mode: ProcessorMode, db_pool: ArcDbPool) -> Self {
+        Self {
+            name,
+            processor_mode,
+            db_pool,
+        }
     }
 }
 
@@ -42,8 +44,8 @@ impl ProcessorStatusSaver for PostgresProcessorStatusSaver {
         last_success_batch: &TransactionContext<()>,
     ) -> Result<(), ProcessorError> {
         save_processor_status(
-            "nft_aggregator",
-            self.config.processor_mode.clone(),
+            self.name.as_str(),
+            self.processor_mode.clone(),
             last_success_batch,
             self.db_pool.clone(),
         )
@@ -158,10 +160,10 @@ pub async fn save_processor_status(
 }
 
 pub async fn get_starting_version(
-    config: &IndexerProcessorConfig,
+    processor_name: &str,
+    processor_mode: &ProcessorMode,
     db_pool: ArcDbPool,
 ) -> Result<Option<u64>, ProcessorError> {
-    let processor_name = "nft_aggregator";
     let mut conn = db_pool
         .get()
         .await
@@ -169,7 +171,7 @@ pub async fn get_starting_version(
             message: format!("Failed to get database connection. {e:?}"),
         })?;
 
-    match &config.processor_mode {
+    match processor_mode {
         ProcessorMode::Default(BootStrapConfig {
             initial_starting_version,
         }) => {
@@ -218,7 +220,7 @@ pub async fn get_starting_version(
                     // If the ending_version is provided, use it. If not, compute the ending_version from processor_status.last_success_version.
                     let backfill_end_version = match *ending_version {
                         Some(e) => Some(e as i64),
-                        None => get_end_version(config, db_pool.clone())
+                        None => get_end_version(processor_name, processor_mode, db_pool.clone())
                             .await?
                             .map(|v| v as i64),
                     };
@@ -277,11 +279,10 @@ pub async fn get_starting_version(
 }
 
 pub async fn get_end_version(
-    config: &IndexerProcessorConfig,
+    processor_name: &str,
+    processor_mode: &ProcessorMode,
     db_pool: ArcDbPool,
 ) -> Result<Option<u64>, ProcessorError> {
-    let processor_name = "nft_aggregator";
-    let processor_mode = &config.processor_mode;
     match processor_mode {
         ProcessorMode::Default(_) => Ok(None),
         ProcessorMode::Backfill(BackfillConfig { ending_version, .. }) => {

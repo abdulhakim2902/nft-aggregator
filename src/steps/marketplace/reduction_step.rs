@@ -1,12 +1,6 @@
-use crate::{
-    models::{
-        db::{
-            action::Action, bid::Bid, collection::Collection, commission::Commission,
-            listing::Listing, nft::Nft,
-        },
-        marketplace::{BidModel, ListingModel, NftMarketplaceActivity},
-    },
-    steps::remapper_step::RemappingOutput,
+use crate::models::{
+    db::{action::Action, bid::Bid, listing::Listing},
+    marketplace::{BidModel, ListingModel, NftMarketplaceActivity},
 };
 use anyhow::Result;
 use aptos_indexer_processor_sdk::{
@@ -25,16 +19,6 @@ pub struct NFTAccumulator {
     actions: HashMap<i64, Action>,
     bids: HashMap<BidIdType, Bid>,
     listings: HashMap<ListingIdType, Listing>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct ReductionOutput {
-    pub actions: Vec<Action>,
-    pub bids: Vec<Bid>,
-    pub listings: Vec<Listing>,
-    pub collections: Vec<Collection>,
-    pub nfts: Vec<Nft>,
-    pub commissions: Vec<Commission>,
 }
 
 impl NFTAccumulator {
@@ -147,15 +131,15 @@ impl NFTReductionStep {
 
 #[async_trait::async_trait]
 impl Processable for NFTReductionStep {
-    type Input = RemappingOutput;
-    type Output = ReductionOutput;
+    type Input = Vec<Vec<NftMarketplaceActivity>>;
+    type Output = (Vec<Action>, Vec<Bid>, Vec<Listing>);
     type RunType = AsyncRunType;
 
     async fn process(
         &mut self,
         input: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<Self::Output>>, ProcessorError> {
-        for activities in input.data.marketplace_activities.iter() {
+        for activities in input.data.iter() {
             for activity in activities {
                 self.accumulator.fold_actions(activity);
                 self.accumulator.fold_bidding(activity);
@@ -163,19 +147,10 @@ impl Processable for NFTReductionStep {
             }
         }
 
-        let (actions, bids, listings) = self.accumulator.drain();
-
-        let output = ReductionOutput {
-            collections: input.data.collections.clone(),
-            commissions: input.data.commissions.clone(),
-            nfts: input.data.nfts.clone(),
-            actions,
-            bids,
-            listings,
-        };
+        let reduced_data = self.accumulator.drain();
 
         Ok(Some(TransactionContext {
-            data: output,
+            data: reduced_data,
             metadata: input.metadata,
         }))
     }
