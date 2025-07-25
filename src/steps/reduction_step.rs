@@ -8,6 +8,7 @@ use crate::{
     },
     steps::remapper_step::RemappingOutput,
 };
+use anyhow::Result;
 use aptos_indexer_processor_sdk::{
     traits::{AsyncRunType, AsyncStep, NamedStep, Processable},
     types::transaction_context::TransactionContext,
@@ -166,8 +167,8 @@ impl Processable for NFTReductionStep {
 
         let output = ReductionOutput {
             collections: input.data.collections.clone(),
-            nfts: input.data.nfts.clone(),
             commissions: input.data.commissions.clone(),
+            nfts: input.data.nfts.clone(),
             actions,
             bids,
             listings,

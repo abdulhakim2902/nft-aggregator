@@ -8,7 +8,7 @@ use crate::{
         reduction_step::NFTReductionStep,
         remapper_step::ProcessStep,
     },
-    workers::price_worker::PriceWorker,
+    workers::{attribute_worker::AttributeWorker, price_worker::PriceWorker},
     MIGRATIONS,
 };
 use anyhow::Result;
@@ -87,10 +87,12 @@ impl ProcessorTrait for Processor {
         .await?;
 
         let price_worker = PriceWorker::new(&self.config.tapp_url, self.db_pool.clone());
+        let attribute_worker = AttributeWorker::new(self.db_pool.clone());
 
         tokio::spawn(async move { price_worker.start().await });
+        tokio::spawn(async move { attribute_worker.start().await });
 
-        let channel_size = 100;
+        let channel_size = 10;
 
         // Define processor steps
         let transaction_stream = TransactionStreamStep::new(TransactionStreamConfig {

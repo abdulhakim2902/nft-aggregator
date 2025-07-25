@@ -5,8 +5,7 @@ CREATE TABLE IF NOT EXISTS nfts (
   name VARCHAR(128),
   owner VARCHAR(66),
   collection_id VARCHAR(66) DEFAULT NULL,
-  attributes JSONB DEFAULT NULL,
-  media_url VARCHAR DEFAULT NULL,
+  properties JSONB DEFAULT NULL,
   image_data VARCHAR DEFAULT NULL,
   avatar_url VARCHAR DEFAULT NULL,
   image_url VARCHAR DEFAULT NULL,
@@ -17,6 +16,7 @@ CREATE TABLE IF NOT EXISTS nfts (
   youtube_url VARCHAR DEFAULT NULL,
   burned BOOLEAN DEFAULT false,
   version VARCHAR(10) DEFAULT 'v2',
+  created_at timestamp(6) WITH time zone DEFAULT NOW(),
   PRIMARY KEY (id)
 );
 

@@ -73,7 +73,7 @@ impl Processable for DBWritingStep {
             listing_result,
             nft_result,
             collection_result,
-            commissionn_result,
+            commission_result,
         ) = tokio::join!(
             action_fut,
             bid_fut,
@@ -89,7 +89,7 @@ impl Processable for DBWritingStep {
             listing_result,
             nft_result,
             collection_result,
-            commissionn_result,
+            commission_result,
         ] {
             match result {
                 Ok(_) => (),
@@ -210,9 +210,16 @@ pub fn insert_nfts(
         .do_update()
         .set((
             owner.eq(excluded(owner)),
-            media_url.eq(excluded(media_url)),
             name.eq(excluded(name)),
+            image_url.eq(excluded(image_url)),
             description.eq(excluded(description)),
-            attributes.eq(excluded(attributes)),
+            properties.eq(excluded(properties)),
+            background_color.eq(excluded(background_color)),
+            image_data.eq(excluded(image_data)),
+            animation_url.eq(excluded(animation_url)),
+            youtube_url.eq(excluded(youtube_url)),
+            avatar_url.eq(excluded(avatar_url)),
+            external_url.eq(excluded(external_url)),
+            burned.eq(excluded(burned)),
         ))
 }

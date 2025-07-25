@@ -1,17 +1,6 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    _sqlx_migrations (version) {
-        version -> Int8,
-        description -> Text,
-        installed_on -> Timestamptz,
-        success -> Bool,
-        checksum -> Bytea,
-        execution_time -> Int8,
-    }
-}
-
-diesel::table! {
     actions (tx_index, tx_id) {
         #[max_length = 30]
         tx_type -> Varchar,
@@ -34,6 +23,19 @@ diesel::table! {
         usd_price -> Nullable<Numeric>,
         block_time -> Timestamptz,
         block_height -> Int8,
+    }
+}
+
+diesel::table! {
+    attributes (collection_id, nft_id, attr_type, value) {
+        #[max_length = 66]
+        collection_id -> Varchar,
+        #[max_length = 66]
+        nft_id -> Varchar,
+        attr_type -> Varchar,
+        value -> Varchar,
+        score -> Nullable<Numeric>,
+        rarity -> Nullable<Numeric>,
     }
 }
 
@@ -144,8 +146,7 @@ diesel::table! {
         owner -> Nullable<Varchar>,
         #[max_length = 66]
         collection_id -> Nullable<Varchar>,
-        attributes -> Nullable<Jsonb>,
-        media_url -> Nullable<Varchar>,
+        properties -> Nullable<Jsonb>,
         image_data -> Nullable<Varchar>,
         avatar_url -> Nullable<Varchar>,
         image_url -> Nullable<Varchar>,
@@ -157,6 +158,7 @@ diesel::table! {
         burned -> Nullable<Bool>,
         #[max_length = 10]
         version -> Nullable<Varchar>,
+        created_at -> Nullable<Timestamptz>,
     }
 }
 
@@ -178,8 +180,8 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-    _sqlx_migrations,
     actions,
+    attributes,
     backfill_processor_status,
     bids,
     collections,

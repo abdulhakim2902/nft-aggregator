@@ -1,5 +1,6 @@
 pub mod db;
 pub mod marketplace;
+pub mod nft_metadata;
 pub mod resources;
 
 use crate::config::marketplace_config::EventType;

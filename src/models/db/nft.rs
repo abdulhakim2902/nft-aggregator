@@ -10,16 +10,29 @@ use ahash::{AHashMap, HashMap};
 use anyhow::Result;
 use aptos_indexer_processor_sdk::{
     aptos_protos::transaction::v1::{WriteResource, WriteTableItem},
+    postgres::utils::database::DbPoolConnection,
     utils::convert::standardize_address,
 };
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use field_count::FieldCount;
 use serde::{Deserialize, Serialize};
 
 #[derive(
-    Clone, Debug, Default, Deserialize, FieldCount, Identifiable, Insertable, Serialize, Queryable,
+    Clone,
+    Debug,
+    Default,
+    Deserialize,
+    FieldCount,
+    Identifiable,
+    Insertable,
+    Serialize,
+    Queryable,
+    Selectable,
 )]
 #[diesel(primary_key(id))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 #[diesel(table_name = nfts)]
 pub struct Nft {
     pub id: String,
@@ -27,17 +40,17 @@ pub struct Nft {
     pub owner: Option<String>,
     pub collection_id: Option<String>,
     pub burned: Option<bool>,
-    pub attributes: Option<serde_json::Value>,
+    pub properties: Option<serde_json::Value>,
     pub description: Option<String>,
     pub background_color: Option<String>,
-    pub media_url: Option<String>,
     pub image_data: Option<String>,
     pub animation_url: Option<String>,
     pub youtube_url: Option<String>,
     pub avatar_url: Option<String>,
     pub external_url: Option<String>,
     pub image_url: Option<String>,
-    pub version: String,
+    pub version: Option<String>,
+    pub created_at: Option<NaiveDateTime>,
 }
 
 impl Nft {
@@ -52,9 +65,9 @@ impl Nft {
                 id: token_addr.clone(),
                 collection_id: Some(inner.get_collection_address()),
                 name: Some(inner.name),
-                media_url: Some(inner.uri),
+                image_url: Some(inner.uri),
                 description: Some(inner.description),
-                version: "v2".to_string(),
+                version: Some("v2".to_string()),
                 ..Default::default()
             };
 
@@ -69,7 +82,7 @@ impl Nft {
                 }
 
                 if let Some(property_map) = object_data.property_map.as_ref() {
-                    nft.attributes = Some(property_map.inner.clone());
+                    nft.properties = Some(property_map.inner.clone());
                 }
             }
 
@@ -121,10 +134,10 @@ impl Nft {
                         owner: owner_address,
                         collection_id: Some(token_data_id_struct.get_collection_addr()),
                         name: Some(token_data.name),
-                        media_url: Some(token_data.uri),
-                        attributes: Some(token_data.default_properties),
+                        image_url: Some(token_data.uri),
+                        properties: Some(token_data.default_properties),
                         description: Some(token_data.description),
-                        version: "v1".to_string(),
+                        version: Some("v1".to_string()),
                         ..Default::default()
                     };
 
@@ -134,5 +147,28 @@ impl Nft {
         }
 
         Ok(None)
+    }
+
+    pub async fn get_nfts(
+        conn: &mut DbPoolConnection<'_>,
+        offset: i64,
+        limit: i64,
+    ) -> diesel::QueryResult<Vec<Nft>> {
+        nfts::dsl::nfts
+            .filter(nfts::image_url.ilike("%.json"))
+            .select(Nft::as_select())
+            .order(nfts::created_at.asc())
+            .limit(limit)
+            .offset(offset)
+            .load::<Nft>(conn)
+            .await
+    }
+
+    pub async fn count_nfts(conn: &mut DbPoolConnection<'_>) -> diesel::QueryResult<i64> {
+        nfts::dsl::nfts
+            .filter(nfts::image_url.ilike("%.json"))
+            .count()
+            .get_result(conn)
+            .await
     }
 }
