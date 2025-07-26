@@ -19,26 +19,3 @@ CREATE TABLE IF NOT EXISTS nfts (
   created_at timestamp(6) WITH time zone DEFAULT NOW(),
   PRIMARY KEY (id)
 );
-
-CREATE FUNCTION update_nft_burn_status ()
-    RETURNS TRIGGER
-    AS $$
-BEGIN
-	IF NEW.tx_type = 'burn' THEN
-	  INSERT INTO nfts(id, collection_id, burned, owner)
-      VALUES (NEW.nft_id, NEW.collection_id, true, NULL)
-    ON CONFLICT(id)
-      DO UPDATE SET
-        burned = true,
-        owner = NULL;
-	END IF;
-  
-  RETURN NEW;
-END;
-$$
-LANGUAGE plpgsql;
-
-CREATE TRIGGER burned_changes
-    AFTER INSERT ON actions
-    FOR EACH ROW
-    EXECUTE FUNCTION update_nft_burn_status ();

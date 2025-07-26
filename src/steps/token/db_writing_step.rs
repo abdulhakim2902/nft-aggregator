@@ -1,5 +1,5 @@
 use crate::{
-    models::db::{action::Action, collection::Collection, nft::Nft},
+    models::db::{action::Action, attributes::Attribute, collection::Collection, nft::Nft},
     postgres::postgres_utils::{execute_in_chunks, ArcDbPool},
     schema,
 };
@@ -27,7 +27,13 @@ impl DBWritingStep {
 
 #[async_trait]
 impl Processable for DBWritingStep {
-    type Input = (Vec<Action>, Vec<Collection>, Vec<Nft>);
+    type Input = (
+        Vec<Action>,
+        Vec<Collection>,
+        Vec<Nft>,
+        Vec<Attribute>,
+        Vec<Nft>,
+    );
     type Output = ();
     type RunType = AsyncRunType;
 
@@ -35,17 +41,32 @@ impl Processable for DBWritingStep {
         &mut self,
         input: TransactionContext<Self::Input>,
     ) -> Result<Option<TransactionContext<()>>, ProcessorError> {
-        let (actions, collections, nfts) = input.data;
+        let (actions, collections, nfts, attributes, burn_nfts) = input.data;
 
         let action_fut = execute_in_chunks(self.db_pool.clone(), insert_actions, &actions, 200);
         let nft_fut = execute_in_chunks(self.db_pool.clone(), insert_nfts, &nfts, 200);
+        let burn_nft_fut =
+            execute_in_chunks(self.db_pool.clone(), insert_burn_nfts, &burn_nfts, 200);
         let collection_fut =
             execute_in_chunks(self.db_pool.clone(), insert_collections, &collections, 200);
+        let attribute_fut =
+            execute_in_chunks(self.db_pool.clone(), insert_attributes, &attributes, 200);
 
-        let (action_result, nft_result, collection_result) =
-            tokio::join!(action_fut, nft_fut, collection_fut,);
+        let (action_result, nft_result, collection_result, attribute_result, burn_nft_result) = tokio::join!(
+            action_fut,
+            nft_fut,
+            collection_fut,
+            attribute_fut,
+            burn_nft_fut
+        );
 
-        for result in [action_result, nft_result, collection_result] {
+        for result in [
+            action_result,
+            nft_result,
+            collection_result,
+            attribute_result,
+            burn_nft_result,
+        ] {
             match result {
                 Ok(_) => (),
                 Err(e) => {
@@ -124,4 +145,27 @@ pub fn insert_nfts(
             external_url.eq(excluded(external_url)),
             burned.eq(excluded(burned)),
         ))
+}
+
+pub fn insert_burn_nfts(
+    items_to_insert: Vec<Nft>,
+) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
+    use crate::schema::nfts::dsl::*;
+
+    diesel::insert_into(schema::nfts::table)
+        .values(items_to_insert)
+        .on_conflict(id)
+        .do_update()
+        .set((owner.eq(excluded(owner)), burned.eq(excluded(burned))))
+}
+
+pub fn insert_attributes(
+    items_to_insert: Vec<Attribute>,
+) -> impl QueryFragment<Pg> + diesel::query_builder::QueryId + Send {
+    use crate::schema::attributes::dsl::*;
+
+    diesel::insert_into(schema::attributes::table)
+        .values(items_to_insert)
+        .on_conflict((collection_id, nft_id, attr_type, value))
+        .do_nothing()
 }

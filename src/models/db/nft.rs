@@ -1,7 +1,11 @@
 use crate::{
-    models::resources::{
-        token::{Token as TokenResourceData, TokenWriteSet},
-        FromWriteResource, TYPE_TOKEN_STORE_V1,
+    models::{
+        db::attributes::Attribute,
+        nft_metadata::NFTMetadata,
+        resources::{
+            token::{Token as TokenResourceData, TokenWriteSet},
+            FromWriteResource, TYPE_TOKEN_STORE_V1,
+        },
     },
     schema::nfts,
     utils::{object_utils::ObjectAggregatedData, token_utils::TableMetadataForToken},
@@ -147,6 +151,67 @@ impl Nft {
         }
 
         Ok(None)
+    }
+
+    pub async fn get_attributes(
+        &mut self,
+        current_metadata: &mut AHashMap<String, NFTMetadata>,
+    ) -> Option<Vec<Attribute>> {
+        if let Some(image_url) = self.image_url.as_ref() {
+            if !image_url.ends_with(".json") {
+                return None;
+            }
+        }
+
+        let image_url = self.image_url.clone().unwrap();
+        let metadata = if let Some(metadata) = current_metadata.get(&image_url).cloned() {
+            Some(metadata)
+        } else {
+            match reqwest::get(&image_url).await {
+                Ok(response) => match response.json::<NFTMetadata>().await {
+                    Ok(value) => Some(value),
+                    _ => None,
+                },
+                _ => None,
+            }
+        };
+
+        if let Some(metadata) = metadata {
+            self.image_url = metadata.image.clone();
+            self.youtube_url = metadata.youtube_url.clone();
+            self.background_color = metadata.background_color.clone();
+            self.external_url = metadata.external_url.clone();
+            self.animation_url = metadata.animation_url.clone();
+            self.avatar_url = metadata.avatar_url.clone();
+            self.image_data = metadata.image_data.clone();
+            if self.name.is_none() {
+                self.name = metadata.name.clone();
+            }
+
+            if self.description.is_none() {
+                self.description = metadata.description.clone();
+            }
+
+            let mut attributes = Vec::new();
+            for attribute in &metadata.attributes {
+                let attribute = Attribute {
+                    collection_id: self.collection_id.clone(),
+                    nft_id: Some(self.id.clone()),
+                    attr_type: Some(attribute.trait_type.to_lowercase()),
+                    value: Some(attribute.value.to_lowercase()),
+                    score: None,
+                    rarity: None,
+                };
+
+                attributes.push(attribute);
+            }
+
+            current_metadata.insert(image_url, metadata);
+
+            return Some(attributes);
+        }
+
+        None
     }
 
     pub async fn get_nfts(

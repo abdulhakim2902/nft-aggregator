@@ -13,7 +13,7 @@ use crate::{
             db_writing_step::DBWritingStep as TokenDBWritingStep, extractor_step::TokenExtractor,
         },
     },
-    workers::{attribute_worker::AttributeWorker, price_worker::PriceWorker},
+    workers::price_worker::PriceWorker,
     MIGRATIONS,
 };
 use anyhow::Result;
@@ -287,10 +287,8 @@ impl ProcessorTrait for Processor {
         .await?;
 
         let price_worker = PriceWorker::new(&self.config.tapp_url, self.db_pool.clone());
-        let attribute_worker = AttributeWorker::new(self.db_pool.clone());
 
         tokio::spawn(async move { price_worker.start().await });
-        tokio::spawn(async move { attribute_worker.start().await });
 
         let mut nft_marketplace_configs = self.config.nft_marketplace_configs.clone();
         nft_marketplace_configs.push(NFTMarketplaceConfig::default());

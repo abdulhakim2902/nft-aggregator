@@ -1,6 +1,6 @@
 use crate::{
     config::marketplace_config::MarketplaceEventType,
-    models::EventModel,
+    models::{db::nft::Nft, EventModel},
     schema::actions,
     utils::{
         object_utils::ObjectAggregatedData,
@@ -194,5 +194,16 @@ impl Action {
         }
 
         Ok(None)
+    }
+}
+
+impl From<Action> for Nft {
+    fn from(value: Action) -> Self {
+        Self {
+            id: value.nft_id.unwrap(),
+            burned: Some(true),
+            collection_id: value.collection_id,
+            ..Default::default()
+        }
     }
 }

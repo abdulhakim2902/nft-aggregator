@@ -41,14 +41,11 @@ impl AttributeWorker {
         let batch_size = 20i64;
         let mut offset = 0;
 
-        println!("TOTAL ATTRIBUTES: {}", total_attributes);
-
         if total_attributes <= 0 {
             return Ok(());
         }
 
         while offset < total_attributes {
-            println!("TOTAL ATTRIBUTES: {}, OFFSET: {}", total_attributes, offset);
             let mut nfts = Nft::get_nfts(&mut conn, offset, batch_size).await?;
             let nft_metadata_fut = nfts.iter().map(|nft| async move {
                 let image_url = nft.image_url.as_ref().unwrap();
