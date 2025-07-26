@@ -184,25 +184,13 @@ impl Processor {
             .await?,
         );
 
-        let segments = config
-            .module_address
-            .split("::")
-            .map(|item| item.to_string())
-            .collect::<Vec<_>>();
-
-        let contract_addr = segments.first();
-        let module_name = segments.get(1);
-
-        let mut struct_filter_builder = MoveStructTagFilterBuilder::default();
-        if let Some(addr) = contract_addr {
-            struct_filter_builder.address(addr);
-        }
-        if let Some(module) = module_name {
-            struct_filter_builder.module(module);
-        }
+        let addr = config.contract_address.clone();
+        let struct_filter_builder = MoveStructTagFilterBuilder::default()
+            .address(addr)
+            .build()?;
 
         let sc_addr_filter = EventFilterBuilder::default()
-            .struct_type(struct_filter_builder.build()?)
+            .struct_type(struct_filter_builder)
             .build()?;
 
         let tx_filter = TransactionRootFilterBuilder::default()
@@ -305,7 +293,7 @@ impl ProcessorTrait for Processor {
                 if let Err(e) = result {
                     error!(
                         err = ?e,
-                        module_addr = %config.module_address,
+                        module_addr = %config.contract_address,
                         "Error streaming and publishing events"
                     );
                 }

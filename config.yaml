@@ -3,7 +3,7 @@ server_config:
   tapp_url: "https://display-engine-mirror.tapp-dex.devucc.name/api/v1"
   processor_mode:
     type: default
-    initial_starting_version: 1997824036
+    initial_starting_version: 980540880
   transaction_stream_config:
     indexer_grpc_data_service_address: "https://grpc.mainnet.aptoslabs.com:443"
     # At which tx version to start indexing, usually this is the tx version when the contract was deployed
@@ -21,19 +21,19 @@ server_config:
     db_pool_size: 25
   nft_marketplace_configs:
     - name: topaz
-      module_address: 0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2::events
+      contract_address: 0x2c7bccf7b31baf770fdbcc768d9e9cb3d87805e255355df5db32ac9a669010a2
       event_model_mapping:
-        ListEvent: list
-        DelistEvent: unlist
-        BuyEvent: buy
-        BidEvent: solo_bid
-        CancelBidEvent: unlist_bid
-        SellEvent: accept_bid
-        CollectionBidEvent: collection_bid  
-        FillCollectionBidEvent: accept_collection_bid
-        CancelCollectionBidEvent: cancel_collection_bid
+        events::ListEvent: list
+        events::DelistEvent: unlist
+        events::BuyEvent: buy
+        events::BidEvent: solo_bid
+        events::CancelBidEvent: unlist_bid
+        events::SellEvent: accept_bid
+        events::CollectionBidEvent: collection_bid  
+        events::FillCollectionBidEvent: accept_collection_bid
+        events::CancelCollectionBidEvent: cancel_collection_bid
       events:
-        ListEvent:
+        events::ListEvent:
           event_fields:
             "$.listing_id":
               - table: nft_marketplace_activities
@@ -57,7 +57,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: token_amount
 
-        DelistEvent:
+        events::DelistEvent:
           event_fields:
             "$.listing_id":
               - table: nft_marketplace_activities
@@ -81,7 +81,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: token_amount
         
-        BuyEvent:
+        events::BuyEvent:
           event_fields:
             "$.listing_id":
               - table: nft_marketplace_activities
@@ -108,7 +108,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: token_amount
         
-        BidEvent:
+        events::BidEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities
@@ -135,7 +135,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: expiration_time
 
-        CancelBidEvent:
+        events::CancelBidEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities
@@ -162,7 +162,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: expiration_time
 
-        SellEvent:
+        events::SellEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities
@@ -192,7 +192,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: expiration_time
         
-        CollectionBidEvent:
+        events::CollectionBidEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities
@@ -219,7 +219,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: expiration_time
 
-        FillCollectionBidEvent:
+        events::FillCollectionBidEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities
@@ -249,7 +249,7 @@ server_config:
               - table: nft_marketplace_activities
                 column: expiration_time
 
-        CancelCollectionBidEvent:
+        events::CancelCollectionBidEvent:
           event_fields:
             "$.bid_id":
               - table: nft_marketplace_activities

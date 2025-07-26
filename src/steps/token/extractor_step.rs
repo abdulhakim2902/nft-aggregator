@@ -5,7 +5,6 @@ use crate::{
             action::Action, attributes::Attribute, collection::Collection, commission::Commission,
             nft::Nft,
         },
-        nft_metadata::NFTMetadata,
         resources::{FromWriteResource, V2TokenResource},
         EventModel,
     },
@@ -62,7 +61,7 @@ impl Processable for TokenExtractor {
         let table_handler_to_owner =
             TableMetadataForToken::get_table_handle_to_owner_from_transactions(&transactions.data);
         let mut token_metadata_helper: AHashMap<String, ObjectAggregatedData> = AHashMap::new();
-        let mut nft_metadata_helper: AHashMap<String, NFTMetadata> = AHashMap::new();
+        // let mut nft_metadata_helper: AHashMap<String, NFTMetadata> = AHashMap::new();
 
         for txn in &transactions.data {
             if let Some(txn_info) = txn.info.as_ref() {
@@ -249,20 +248,20 @@ impl Processable for TokenExtractor {
                             )
                             .unwrap();
 
-                            if let Some(mut nft) = nft_result {
-                                let attributes = nft.get_attributes(&mut nft_metadata_helper).await;
-                                if let Some(attributes) = attributes {
-                                    for attribute in attributes {
-                                        let key = (
-                                            attribute.collection_id.as_ref().unwrap().to_string(),
-                                            attribute.nft_id.as_ref().unwrap().to_string(),
-                                            attribute.attr_type.as_ref().unwrap().to_string(),
-                                            attribute.value.as_ref().unwrap().to_string(),
-                                        );
+                            if let Some(nft) = nft_result {
+                                // let attributes = nft.get_attributes(&mut nft_metadata_helper).await;
+                                // if let Some(attributes) = attributes {
+                                //     for attribute in attributes {
+                                //         let key = (
+                                //             attribute.collection_id.as_ref().unwrap().to_string(),
+                                //             attribute.nft_id.as_ref().unwrap().to_string(),
+                                //             attribute.attr_type.as_ref().unwrap().to_string(),
+                                //             attribute.value.as_ref().unwrap().to_string(),
+                                //         );
 
-                                        current_attributes.insert(key, attribute);
-                                    }
-                                }
+                                //         current_attributes.insert(key, attribute);
+                                //     }
+                                // }
 
                                 current_nfts.insert(nft.id.clone(), nft);
                             }
@@ -290,20 +289,20 @@ impl Processable for TokenExtractor {
                                 Nft::get_from_write_resource(resource, &token_metadata_helper)
                                     .unwrap();
 
-                            if let Some(mut nft) = nft_result {
-                                let attributes = nft.get_attributes(&mut nft_metadata_helper).await;
-                                if let Some(attributes) = attributes {
-                                    for attribute in attributes {
-                                        let key = (
-                                            attribute.collection_id.as_ref().unwrap().to_string(),
-                                            attribute.nft_id.as_ref().unwrap().to_string(),
-                                            attribute.attr_type.as_ref().unwrap().to_string(),
-                                            attribute.value.as_ref().unwrap().to_string(),
-                                        );
+                            if let Some(nft) = nft_result {
+                                // let attributes = nft.get_attributes(&mut nft_metadata_helper).await;
+                                // if let Some(attributes) = attributes {
+                                //     for attribute in attributes {
+                                //         let key = (
+                                //             attribute.collection_id.as_ref().unwrap().to_string(),
+                                //             attribute.nft_id.as_ref().unwrap().to_string(),
+                                //             attribute.attr_type.as_ref().unwrap().to_string(),
+                                //             attribute.value.as_ref().unwrap().to_string(),
+                                //         );
 
-                                        current_attributes.insert(key, attribute);
-                                    }
-                                }
+                                //         current_attributes.insert(key, attribute);
+                                //     }
+                                // }
 
                                 current_nfts.insert(nft.id.clone(), nft);
                             }

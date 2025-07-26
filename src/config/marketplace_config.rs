@@ -36,7 +36,7 @@ pub struct DbColumn {
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct NFTMarketplaceConfig {
     pub name: String,
-    pub module_address: String,
+    pub contract_address: String,
     /// Maps event type strings to their corresponding MarketplaceEventType enum values.
     /// This mapping is used to standardize different marketplace event types across
     /// different NFT marketplaces into a standarzied event types for processing.

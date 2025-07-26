@@ -27,7 +27,7 @@ impl EventRemapper {
     pub fn new(config: &NFTMarketplaceConfig) -> Result<Arc<Self>> {
         let mut field_remappings: EventFieldRemappings = HashMap::new();
         for (event_type, event_remapping) in &config.events {
-            let event_type: EventType = format!("{}::{}", config.module_address, event_type)
+            let event_type: EventType = format!("{}::{}", config.contract_address, event_type)
                 .as_str()
                 .try_into()?;
             let mut db_mappings_for_event = HashMap::new();
@@ -51,7 +51,7 @@ impl EventRemapper {
         let mut marketplace_event_type_mapping: HashMap<String, MarketplaceEventType> =
             HashMap::new();
         for (event_type, marketplace_event_type) in &config.event_model_mapping {
-            let event_type = format!("{}::{}", config.module_address, event_type);
+            let event_type = format!("{}::{}", config.contract_address, event_type);
             marketplace_event_type_mapping.insert(event_type, marketplace_event_type.clone());
         }
 
